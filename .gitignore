@@ -17,6 +17,11 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.orig.*
+web-build/
+
+# File Rahasia
+.env
 
 # Metro
 .metro-health-check*
