@@ -1,9 +1,11 @@
 {
   "name": "freshia",
-  "main": "expo/AppEntry.js",
+  "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.19",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.19.2",
     "@react-navigation/native": "^7.4.1",
     "expo": "~57.0.24",
@@ -15,6 +17,7 @@
     "expo-image": "~57.0.5",
     "expo-image-manipulator": "~57.0.20",
     "expo-linking": "~57.0.10",
+    "expo-router": "~57.0.23",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
