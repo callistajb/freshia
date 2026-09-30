@@ -192,9 +192,10 @@ export default function ScannerScreen() {
       throw new Error("Gemini API Key belum diatur di .env");
     }
 
+    // Menggunakan istilah baru yang lebih profesional
     const mode = isUmkmMode
-      ? "UMKM (stok jumlah besar)"
-      : "Rumah Tangga (stok kecil)";
+      ? "Komersial (stok jumlah besar)"
+      : "Personal (stok kecil)";
 
     const prompt = `Sistem visi awal mendeteksi gambar ini sebagai: ${roboflowLabel}. 
     Aplikasi saat ini berjalan pada mode: ${mode}.
@@ -206,8 +207,6 @@ export default function ScannerScreen() {
       "recipe": "string saran resep zero-waste singkat"
     }`;
 
-    // Coba model utama dulu. Jika modelnya tidak ditemukan (404), kuotanya habis (429),
-    // atau server sedang sibuk (500/503), coba model cadangan.
     let lastError: any = null;
     for (const model of GEMINI_MODELS) {
       try {
@@ -235,14 +234,14 @@ export default function ScannerScreen() {
         await SystemUI.setBackgroundColorAsync("black");
       }
 
-      // Ambil gambar (Dapatkan URI fisik dan Base64 sekaligus)
+      // 1. Ambil Foto
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
         quality: 0.3,
         shutterSound: false,
       });
 
-      // 1. ROBOFLOW DETECTION
+      // 2. ROBOFLOW DETECTION
       const apiKey = process.env.EXPO_PUBLIC_ROBOFLOW_API_KEY;
       const modelId = process.env.EXPO_PUBLIC_ROBOFLOW_MODEL_ID;
       const apiUrl = `https://detect.roboflow.com/${modelId}?api_key=${apiKey}`;
@@ -251,24 +250,25 @@ export default function ScannerScreen() {
       let confidenceScore = "0";
 
       if (apiKey && modelId) {
-        const roboResponse = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: photo.base64,
-        });
-        const roboData = await roboResponse.json();
-
-        if (roboData.predictions && roboData.predictions.length > 0) {
-          rawClass = roboData.predictions[0].class;
-          confidenceScore = (roboData.predictions[0].confidence * 100).toFixed(
-            1,
-          );
+        try {
+          const roboResponse = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: photo.base64,
+          });
+          const roboData = await roboResponse.json();
+          if (roboData.predictions && roboData.predictions.length > 0) {
+            rawClass = roboData.predictions[0].class;
+            confidenceScore = (
+              roboData.predictions[0].confidence * 100
+            ).toFixed(1);
+          }
+        } catch (roboErr) {
+          rawClass = "Buah (Deteksi awal dilewati)";
         }
-      } else {
-        rawClass = "Buah (Deteksi awal dilewati)";
       }
 
-      // 2. GEMINI ANALYSIS (Hybrid)
+      // 3. GEMINI ANALYSIS
       let geminiAnalysis = null;
       try {
         geminiAnalysis = await analyzeWithGemini(photo.base64, rawClass);
@@ -278,37 +278,18 @@ export default function ScannerScreen() {
           freshnessPercentage: 0,
           salvageValue: "Rp0 (Error Gemini)",
           shelfLife: "0 hari",
-          recipe:
-            "Analisis AI gagal. Periksa API key dan nama model Gemini di file .env, lalu coba pindai lagi.",
+          recipe: "Analisis AI gagal. Periksa koneksi internet.",
         };
-      }
-
-      // 3. UPLOAD KE CLOUDINARY & SIMPAN KE FIREBASE
-      try {
-        const cloudinaryUrl = await uploadToCloudinary(photo.base64);
-
-        // Simpan URL gambar dan data hasil analisis ke Firestore
-        await addDoc(collection(db, "scan_history"), {
-          imageUrl: cloudinaryUrl,
-          label: rawClass,
-          confidence: confidenceScore,
-          analysis: geminiAnalysis,
-          mode: isUmkmMode ? "UMKM" : "Rumah Tangga",
-          timestamp: new Date(),
-        });
-        console.log("Berhasil disimpan ke Firebase & Cloudinary!");
-      } catch (dbError) {
-        // Jika gagal upload/simpan ke cloud, aplikasi tidak crash dan tetap lanjut
-        console.warn("Gagal simpan ke Cloud/Firebase: ", dbError);
       }
 
       // 4. SIMPAN KE HISTORY LOKAL (AsyncStorage)
       await saveToHistory(photo.uri, {
         label: rawClass,
         confidence: confidenceScore,
+        analysis: geminiAnalysis, // <--- TAMBAHKAN BARIS INI
       });
 
-      // 5. NAVIGASI KE HALAMAN HASIL
+      // 5. LANGSUNG PINDAH KE HALAMAN HASIL! (UX Tidak Tertahan)
       router.push({
         pathname: "/result",
         params: {
@@ -316,9 +297,28 @@ export default function ScannerScreen() {
           analysis: JSON.stringify(geminiAnalysis),
         },
       });
+
+      // 6. JALANKAN UPLOAD CLOUD DI LATAR BELAKANG (Fire-and-forget)
+      // Tanpa perintah "await" di depannya, fungsi ini tidak akan memblokir aplikasi
+      (async () => {
+        try {
+          const cloudinaryUrl = await uploadToCloudinary(photo.base64);
+          await addDoc(collection(db, "scan_history"), {
+            imageUrl: cloudinaryUrl,
+            label: rawClass,
+            confidence: confidenceScore,
+            analysis: geminiAnalysis,
+            mode: isUmkmMode ? "Komersial" : "Personal",
+            timestamp: new Date(),
+          });
+          console.log("Background Task: Berhasil disimpan ke Firebase!");
+        } catch (dbError) {
+          console.warn("Background Task Gagal: ", dbError);
+        }
+      })();
     } catch (error) {
       console.error(error);
-      Alert.alert("Gagal", "Koneksi terputus atau gagal memproses.");
+      Alert.alert("Gagal", "Koneksi terputus saat mengambil foto.");
     } finally {
       setIsProcessing(false);
     }
