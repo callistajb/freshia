@@ -54,3 +54,94 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+PENJELASAN RUNNING 2
+
+# Freshia 📱
+
+Aplikasi mobile berbasis [Expo](https://expo.dev) dan React Native (Expo Router) dengan direktori utama di `src/app`.
+
+---
+
+## 🚀 Persiapan Awal (Saat Pertama Kali Clone)
+
+Jika Anda baru pertama kali mengunduh/clone proyek ini ke laptop baru, ikuti langkah berikut:
+
+1. **Instal seluruh dependensi proyek**
+
+   ```bash
+   npm install
+   ```
+
+2. **Konfigurasi Environment Variables (`.env`)**
+   Buat file bernama `.env` di folder utama proyek (sejajar dengan `package.json`), lalu isi dengan kredensial API berikut:
+
+   ```env
+   EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME=isi_cloud_name_anda
+   EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET=isi_upload_preset_anda
+   EXPO_PUBLIC_GEMINI_API_KEY=isi_gemini_api_key_anda
+   EXPO_PUBLIC_ROBOFLOW_API_KEY=isi_roboflow_api_key_anda
+   EXPO_PUBLIC_ROBOFLOW_MODEL_ID=isi_roboflow_model_id_anda
+   ```
+
+   _(Minta nilai kredensial `.env` yang aktif kepada pemilik/rekan tim proyek)._
+
+3. **Jalankan aplikasi**
+   ```bash
+   npx expo start -c
+   ```
+
+---
+
+## 🔄 Panduan Setiap Kali Melakukan `git pull` Baru
+
+Setiap kali Anda menarik pembaruan terbaru dari repositori (`git pull`), biasakan menjalankan langkah berikut agar tidak terjadi error library atau cache lama:
+
+1. **Tarik pembaruan kode terbaru**
+
+   ```bash
+   git pull origin main
+   ```
+
+   _(Sesuaikan `main` dengan nama branch yang digunakan)._
+
+2. **Perbarui package jika ada penambahan library baru**
+
+   ```bash
+   npm install
+   ```
+
+3. **Jalankan ulang Expo dengan membersihkan cache (`-c`)**
+
+   ```bash
+   npx expo start -c
+   ```
+
+4. **Buka aplikasi di perangkat Anda:**
+   - **Android / iOS (Expo Go):** Scan QR Code yang muncul di terminal menggunakan aplikasi **Expo Go** (Android) atau kamera bawaan (iOS).
+   - **Web:** Tekan tombol `w` di terminal atau buka `http://localhost:8081`.
+
+---
+
+## 🛠️ Solusi Masalah Umum (Troubleshooting)
+
+- **Error `Unable to resolve "<nama-package>"` (misalnya `expo-linear-gradient`):**
+  Ada library baru yang belum terinstal di laptop Anda. Jalankan perintah:
+
+  ```bash
+  npx expo install <nama-package>
+  npx expo start -c
+  ```
+
+- **Error `Request timed out` saat membuka di Expo Go (iOS / Android):**
+  Biasanya terjadi karena perbedaan jaringan Wi-Fi atau terblokir Windows Firewall. Jalankan Expo menggunakan mode tunnel:
+
+  ```bash
+  npx expo start --tunnel
+  ```
+
+- **Perubahan `.env` tidak terbaca:**
+  Hentikan server (`Ctrl + C`), lalu jalankan ulang dengan membersihkan cache:
+  ```bash
+  npx expo start -c
+  ```

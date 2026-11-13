@@ -2,13 +2,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import {
-    Dimensions,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { width, height } = Dimensions.get("window");
@@ -74,7 +74,7 @@ export default function WelcomeScreen() {
         <TouchableOpacity
           style={styles.loginOutlineButton}
           activeOpacity={0.85}
-          onPress={() => router.push("/login")}
+          onPress={() => router.push("/signin")}
         >
           <Text style={styles.loginOutlineButtonText}>I have an account</Text>
         </TouchableOpacity>
