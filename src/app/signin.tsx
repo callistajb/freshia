@@ -2,23 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import {
-    sendPasswordResetEmail,
-    signInWithEmailAndPassword,
-} from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { auth } from "../firebaseConfig";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
@@ -70,28 +67,6 @@ export default function SignInScreen() {
       showNotification("Gagal Masuk", errorMessage);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      showNotification(
-        "Lupa Kata Sandi",
-        "Masukkan alamat email Anda terlebih dahulu untuk reset kata sandi.",
-      );
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, email.trim());
-      showNotification(
-        "Email Terkirim",
-        "Silakan periksa kotak masuk email Anda untuk mereset kata sandi.",
-      );
-    } catch (error: any) {
-      showNotification(
-        "Gagal",
-        "Pastikan email yang dimasukkan sudah terdaftar.",
-      );
     }
   };
 
@@ -161,7 +136,7 @@ export default function SignInScreen() {
             {/* Lupa Kata Sandi */}
             <TouchableOpacity
               style={styles.forgotPasswordContainer}
-              onPress={handleForgotPassword}
+              onPress={() => router.push("/forgot-password")}
             >
               <Text style={styles.forgotPasswordText}>Lupa Kata Sandi?</Text>
             </TouchableOpacity>
