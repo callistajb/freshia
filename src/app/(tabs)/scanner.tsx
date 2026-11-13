@@ -62,6 +62,7 @@ const uploadToCloudinary = async (base64String: string) => {
 
 // Memanggil satu model Gemini dan mengembalikan hasil analisis yang sudah dirapikan.
 // Jika gagal, error yang dilempar membawa properti `status` (kode HTTP).
+
 const callGeminiModel = async (
   model: string,
   apiKey: string,
@@ -94,6 +95,7 @@ const callGeminiModel = async (
             freshnessPercentage: { type: "NUMBER" },
             salvageValue: { type: "STRING" },
             shelfLife: { type: "STRING" },
+
             recipe: { type: "STRING" },
           },
           required: [
@@ -126,6 +128,7 @@ const callGeminiModel = async (
   const parts = data?.candidates?.[0]?.content?.parts;
   const textResponse = Array.isArray(parts)
     ? parts
+
         .filter((part: any) => typeof part.text === "string" && !part.thought)
         .map((part: any) => part.text)
         .join("")
@@ -158,14 +161,17 @@ export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
   const [isUmkmMode, setIsUmkmMode] = useState(false);
   const router = useRouter();
 
   // Fungsi simpan ke history lokal (AsyncStorage)
+  // Mengembalikan id entri agar bisa ditautkan ke dokumen Firestore nanti
   const saveToHistory = async (photoUri: string, detectionResult: any) => {
+    const entryId = Date.now().toString();
     try {
       const newEntry = {
-        id: Date.now().toString(),
+        id: entryId,
         date: new Date().toLocaleString(),
         image: photoUri,
         result: detectionResult,
@@ -180,6 +186,22 @@ export default function ScannerScreen() {
       );
     } catch (e) {
       console.error("Gagal menyimpan ke history lokal", e);
+    }
+    return entryId;
+  };
+
+  // Menyimpan id dokumen Firestore ke entri riwayat lokal,
+  // supaya halaman Riwayat bisa menghapus dokumen yang sama
+  const linkFirestoreId = async (entryId: string, firestoreId: string) => {
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      const arr = stored ? JSON.parse(stored) : [];
+      const updated = arr.map((item: any) =>
+        item.id === entryId ? { ...item, firestoreId } : item,
+      );
+      await AsyncStorage.setItem("@freshia_history", JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Gagal menautkan ID Firestore", e);
     }
   };
 
@@ -204,6 +226,7 @@ export default function ScannerScreen() {
       "freshnessPercentage": angka (0-100),
       "salvageValue": "string estimasi rupiah",
       "shelfLife": "string prediksi hari",
+
       "recipe": "string saran resep zero-waste singkat"
     }`;
 
@@ -241,6 +264,12 @@ export default function ScannerScreen() {
         shutterSound: false,
       });
 
+      // Normalisasi base64: di web hasilnya berupa data URI lengkap
+      // ("data:image/png;base64,..."), sedangkan API butuh base64 murni
+      const rawBase64: string = photo.base64.includes(",")
+        ? photo.base64.split(",")[1]
+        : photo.base64;
+
       // 2. ROBOFLOW DETECTION
       const apiKey = process.env.EXPO_PUBLIC_ROBOFLOW_API_KEY;
       const modelId = process.env.EXPO_PUBLIC_ROBOFLOW_MODEL_ID;
@@ -254,7 +283,7 @@ export default function ScannerScreen() {
           const roboResponse = await fetch(apiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: photo.base64,
+            body: rawBase64,
           });
           const roboData = await roboResponse.json();
           if (roboData.predictions && roboData.predictions.length > 0) {
@@ -271,7 +300,7 @@ export default function ScannerScreen() {
       // 3. GEMINI ANALYSIS
       let geminiAnalysis = null;
       try {
-        geminiAnalysis = await analyzeWithGemini(photo.base64, rawClass);
+        geminiAnalysis = await analyzeWithGemini(rawBase64, rawClass);
       } catch (err: any) {
         console.warn("Gemini Error: ", err.message);
         geminiAnalysis = {
@@ -283,7 +312,7 @@ export default function ScannerScreen() {
       }
 
       // 4. SIMPAN KE HISTORY LOKAL (AsyncStorage)
-      await saveToHistory(photo.uri, {
+      const entryId = await saveToHistory(photo.uri, {
         label: rawClass,
         confidence: confidenceScore,
         analysis: geminiAnalysis, // <--- TAMBAHKAN BARIS INI
@@ -294,6 +323,7 @@ export default function ScannerScreen() {
         pathname: "/result",
         params: {
           detection: rawClass,
+
           analysis: JSON.stringify(geminiAnalysis),
         },
       });
@@ -302,8 +332,8 @@ export default function ScannerScreen() {
       // Tanpa perintah "await" di depannya, fungsi ini tidak akan memblokir aplikasi
       (async () => {
         try {
-          const cloudinaryUrl = await uploadToCloudinary(photo.base64);
-          await addDoc(collection(db, "scan_history"), {
+          const cloudinaryUrl = await uploadToCloudinary(rawBase64);
+          const docRef = await addDoc(collection(db, "scan_history"), {
             imageUrl: cloudinaryUrl,
             label: rawClass,
             confidence: confidenceScore,
@@ -311,6 +341,7 @@ export default function ScannerScreen() {
             mode: isUmkmMode ? "Komersial" : "Personal",
             timestamp: new Date(),
           });
+          await linkFirestoreId(entryId, docRef.id);
           console.log("Background Task: Berhasil disimpan ke Firebase!");
         } catch (dbError) {
           console.warn("Background Task Gagal: ", dbError);
@@ -389,6 +420,7 @@ const styles = StyleSheet.create({
   textInfo: { textAlign: "center", marginBottom: 20 },
   topBar: {
     flexDirection: "row",
+
     justifyContent: "space-between",
     alignItems: "center",
     padding: 15,

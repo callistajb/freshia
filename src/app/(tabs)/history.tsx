@@ -1,27 +1,64 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
+import { deleteDoc, doc } from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   Alert,
   FlatList,
   Image,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { db } from "../../firebaseConfig";
+
+// Dialog konfirmasi lintas platform.
+// Alert.alert dengan tombol tidak berfungsi di web, jadi web memakai window.confirm.
+const confirmAction = (
+  title: string,
+  message: string,
+  confirmText: string,
+  onConfirm: () => void,
+) => {
+  if (Platform.OS === "web") {
+    if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: "Batal", style: "cancel" },
+    { text: confirmText, style: "destructive", onPress: onConfirm },
+  ]);
+};
+
+// Hapus dokumen di Firestore. Entri lama tanpa firestoreId dilewati.
+const deleteFromCloud = async (item: any) => {
+  if (!item?.firestoreId) return;
+  try {
+    await deleteDoc(doc(db, "scan_history", item.firestoreId));
+  } catch (e) {
+    console.warn("Gagal hapus dokumen Firestore", e);
+  }
+};
+
+// Baca riwayat TERBARU langsung dari AsyncStorage (bukan dari state layar).
+// Penting karena firestoreId ditulis ke AsyncStorage oleh scanner.tsx
+// beberapa detik setelah layar Riwayat memuat datanya.
+const getFreshHistory = async (): Promise<any[]> => {
+  const stored = await AsyncStorage.getItem("@freshia_history");
+  return stored ? JSON.parse(stored) : [];
+};
 
 export default function HistoryScreen() {
   const [historyData, setHistoryData] = useState<any[]>([]);
-  const router = useRouter(); // Tambahkan router untuk navigasi
+  const router = useRouter();
 
   const loadHistory = async () => {
     try {
       const storedData = await AsyncStorage.getItem("@freshia_history");
-      if (storedData) {
-        setHistoryData(JSON.parse(storedData));
-      }
+      setHistoryData(storedData ? JSON.parse(storedData) : []);
     } catch (e) {
       console.error("Gagal memuat riwayat", e);
     }
@@ -33,10 +70,11 @@ export default function HistoryScreen() {
     }, []),
   );
 
-  // Fungsi Toggle Pengingat Masa Simpan
+  // Toggle pengingat masa simpan
   const toggleReminder = async (id: string) => {
     try {
-      const updatedHistory = historyData.map((item) =>
+      const current = await getFreshHistory();
+      const updatedHistory = current.map((item) =>
         item.id === id ? { ...item, isTracked: !item.isTracked } : item,
       );
       setHistoryData(updatedHistory);
@@ -49,69 +87,69 @@ export default function HistoryScreen() {
     }
   };
 
-  // Fungsi Hapus SATU Item
+  // Hapus SATU item (lokal + Firestore)
   const deleteItem = (id: string) => {
-    Alert.alert(
+    confirmAction(
       "Hapus Riwayat",
       "Apakah Anda yakin ingin menghapus data buah ini?",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              // Filter/buang item yang ID-nya sama dengan yang dihapus
-              const updatedHistory = historyData.filter(
-                (item) => item.id !== id,
-              );
-              setHistoryData(updatedHistory);
-              await AsyncStorage.setItem(
-                "@freshia_history",
-                JSON.stringify(updatedHistory),
-              );
-            } catch (e) {
-              console.error("Gagal menghapus riwayat spesifik", e);
-            }
-          },
-        },
-      ],
+      "Hapus",
+      async () => {
+        try {
+          const current = await getFreshHistory();
+          const target = current.find((item) => item.id === id);
+          const updatedHistory = current.filter((item) => item.id !== id);
+          setHistoryData(updatedHistory);
+          await AsyncStorage.setItem(
+            "@freshia_history",
+            JSON.stringify(updatedHistory),
+          );
+          console.log(
+            "Hapus, firestoreId:",
+            target?.firestoreId ?? "(tidak ada)",
+          );
+          await deleteFromCloud(target);
+        } catch (e) {
+          console.error("Gagal menghapus riwayat spesifik", e);
+        }
+      },
     );
   };
 
-  // Fungsi Hapus SEMUA Item
-  const clearHistory = async () => {
-    Alert.alert(
+  // Hapus SEMUA item (lokal + Firestore)
+  const clearHistory = () => {
+    confirmAction(
       "Hapus Semua?",
       "Apakah Anda yakin ingin menghapus SELURUH riwayat pindai?",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus Semua",
-          style: "destructive",
-          onPress: async () => {
-            await AsyncStorage.removeItem("@freshia_history");
-            setHistoryData([]);
-          },
-        },
-      ],
+      "Hapus Semua",
+      async () => {
+        try {
+          const snapshot = await getFreshHistory();
+          await AsyncStorage.removeItem("@freshia_history");
+          setHistoryData([]);
+
+          await Promise.all(snapshot.map(deleteFromCloud));
+        } catch (e) {
+          console.error("Gagal menghapus semua riwayat", e);
+        }
+      },
     );
   };
 
-  // Fungsi Buka Detail (Navigasi ke Result)
+  // Buka detail (navigasi ke Result)
   const openDetails = (item: any) => {
     router.push({
       pathname: "/result",
       params: {
-        detection: item.result.label,
-        // Kirim kembali data JSON analisisnya ke halaman Result
-        analysis: JSON.stringify(item.result.analysis || {}),
+        detection: item.result?.label ?? "Unknown",
+
+        analysis: JSON.stringify(item.result?.analysis || {}),
       },
     });
   };
 
   const renderItem = ({ item }: { item: any }) => {
-    const rawLabel = (item.result?.label || "unknown").toLowerCase();
+    const label: string = item.result?.label ?? "Unknown";
+    const rawLabel = label.toLowerCase();
     const isRotten =
       rawLabel.includes("rotten") ||
       rawLabel.includes("busuk") ||
@@ -121,7 +159,6 @@ export default function HistoryScreen() {
     const shelfLife = item.result?.analysis?.shelfLife || "Tidak ada data";
 
     return (
-      // Kartu utama sekarang bisa diklik untuk membuka detail
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.7}
@@ -132,15 +169,15 @@ export default function HistoryScreen() {
         <View style={styles.cardContent}>
           <Text style={styles.dateText}>{item.date}</Text>
           <Text style={[styles.resultText, { color: statusColor }]}>
-            {item.result.label.toUpperCase()}
+            {label.toUpperCase()}
           </Text>
           <Text style={styles.infoText}>
-            Akurasi: {item.result.confidence}%
+            Akurasi: {item.result?.confidence ?? "-"}%
           </Text>
+
           <Text style={styles.infoText}>Sisa Umur: {shelfLife}</Text>
         </View>
 
-        {/* Kolom Aksi di sebelah kanan (Lonceng & Hapus) */}
         <View style={styles.actionContainer}>
           <TouchableOpacity
             style={styles.actionButton}
@@ -218,6 +255,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#ddd",
   },
   title: { fontSize: 22, fontWeight: "bold", color: "#1b5e20" },
+
   clearAllBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -250,6 +288,7 @@ const styles = StyleSheet.create({
   cardContent: { padding: 12, flex: 1, justifyContent: "center" },
   dateText: { fontSize: 11, color: "#757575", marginBottom: 4 },
   resultText: { fontSize: 16, fontWeight: "bold" },
+
   infoText: { fontSize: 13, color: "#555", marginTop: 2 },
 
   actionContainer: {

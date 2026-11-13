@@ -30,7 +30,6 @@ export default function HomeScreen() {
         let rottenCount = 0;
         let unknownCount = 0;
 
-        // Logika statistik yang lebih akurat
         historyArray.forEach((item: any) => {
           const label = (item.result?.label || "").toLowerCase();
 
@@ -47,7 +46,7 @@ export default function HomeScreen() {
           ) {
             unknownCount++;
           } else {
-            freshCount++; // Terhitung segar jika berhasil terdeteksi sebagai buah normal
+            freshCount++;
           }
         });
 
@@ -58,7 +57,6 @@ export default function HomeScreen() {
           unknown: unknownCount,
         });
 
-        // Ambil data yang dipasangi lonceng pengingat (isTracked === true)
         const reminders = historyArray.filter(
           (item: any) => item.isTracked === true,
         );
@@ -88,7 +86,6 @@ export default function HomeScreen() {
       <Text style={styles.sectionTitle}>Ringkasan Pemindaian</Text>
 
       <View style={styles.statsContainer}>
-        {/* Kartu Segar */}
         <View style={[styles.statCard, { backgroundColor: "#e8f5e9" }]}>
           <MaterialCommunityIcons
             name="check-decagram"
@@ -99,7 +96,6 @@ export default function HomeScreen() {
           <Text style={styles.statLabel}>Buah Segar</Text>
         </View>
 
-        {/* Kartu Busuk */}
         <View style={[styles.statCard, { backgroundColor: "#ffebee" }]}>
           <MaterialCommunityIcons
             name="alert-circle-outline"
@@ -110,7 +106,6 @@ export default function HomeScreen() {
           <Text style={styles.statLabel}>Mulai Layu</Text>
         </View>
 
-        {/* Kartu Unknown/Gagal */}
         <View style={[styles.statCard, { backgroundColor: "#f5f5f5" }]}>
           <MaterialCommunityIcons
             name="help-circle-outline"
@@ -210,7 +205,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingRight: 5,
   },
-
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -239,7 +233,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
-
   reminderScroll: { marginBottom: 30 },
   reminderCard: {
     width: 140,
@@ -275,7 +268,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   shelfLifeText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
-
   emptyCard: {
     backgroundColor: "#fff",
     padding: 25,
@@ -293,7 +285,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 5,
   },
-
   scanButton: {
     backgroundColor: "#2e7d32",
     flexDirection: "row",
