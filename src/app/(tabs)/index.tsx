@@ -1,302 +1,480 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { useEffect, useState } from "react";
 import {
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { auth } from "../../firebaseConfig";
+
+export interface ReminderItem {
+  id: string;
+  name: string;
+  daysLeft: string;
+  imageUri?: string;
+}
 
 export default function HomeScreen() {
-  const [stats, setStats] = useState({
-    total: 0,
-    fresh: 0,
-    rotten: 0,
-    unknown: 0,
-  });
-  const [trackedItems, setTrackedItems] = useState<any[]>([]);
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [reminders] = useState<ReminderItem[]>([]);
 
-  const loadDashboardData = async () => {
-    try {
-      const storedData = await AsyncStorage.getItem("@freshia_history");
-      if (storedData) {
-        const historyArray = JSON.parse(storedData);
-        let freshCount = 0;
-        let rottenCount = 0;
-        let unknownCount = 0;
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return unsubscribe;
+  }, []);
 
-        historyArray.forEach((item: any) => {
-          const label = (item.result?.label || "").toLowerCase();
-
-          if (
-            label.includes("rotten") ||
-            label.includes("busuk") ||
-            label.includes("layu")
-          ) {
-            rottenCount++;
-          } else if (
-            label.includes("unknown") ||
-            label.includes("gagal") ||
-            label.includes("dilewati")
-          ) {
-            unknownCount++;
-          } else {
-            freshCount++;
-          }
-        });
-
-        setStats({
-          total: historyArray.length,
-          fresh: freshCount,
-          rotten: rottenCount,
-          unknown: unknownCount,
-        });
-
-        const reminders = historyArray.filter(
-          (item: any) => item.isTracked === true,
-        );
-        setTrackedItems(reminders);
-      }
-    } catch (e) {
-      console.error("Gagal memuat data dashboard", e);
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadDashboardData();
-    }, []),
-  );
+  const displayName =
+    user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Halo, Freshian! 👋</Text>
-          <Text style={styles.subtitle}>Pantau kesegaran stok Anda</Text>
-        </View>
-        <MaterialCommunityIcons name="leaf-circle" size={40} color="#2e7d32" />
-      </View>
+    <View style={styles.root}>
+      <StatusBar style="light" />
 
-      <Text style={styles.sectionTitle}>Ringkasan Pemindaian</Text>
-
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: "#e8f5e9" }]}>
-          <MaterialCommunityIcons
-            name="check-decagram"
-            size={28}
-            color="#2e7d32"
-          />
-          <Text style={styles.statNumber}>{stats.fresh}</Text>
-          <Text style={styles.statLabel}>Buah Segar</Text>
-        </View>
-
-        <View style={[styles.statCard, { backgroundColor: "#ffebee" }]}>
-          <MaterialCommunityIcons
-            name="alert-circle-outline"
-            size={28}
-            color="#c62828"
-          />
-          <Text style={styles.statNumber}>{stats.rotten}</Text>
-          <Text style={styles.statLabel}>Mulai Layu</Text>
-        </View>
-
-        <View style={[styles.statCard, { backgroundColor: "#f5f5f5" }]}>
-          <MaterialCommunityIcons
-            name="help-circle-outline"
-            size={28}
-            color="#757575"
-          />
-          <Text style={styles.statNumber}>{stats.unknown}</Text>
-          <Text style={styles.statLabel}>Tak Dikenal</Text>
-        </View>
-      </View>
-
-      <View style={styles.titleRow}>
-        <Text style={styles.sectionTitle}>Pengingat Masa Simpan</Text>
-        <MaterialCommunityIcons name="bell-ring" size={20} color="#fbc02d" />
-      </View>
-
-      {trackedItems.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.reminderScroll}
-        >
-          {trackedItems.map((item) => (
-            <View key={item.id} style={styles.reminderCard}>
-              <Image
-                source={{ uri: item.image }}
-                style={styles.reminderImage}
-              />
-              <View style={styles.reminderOverlay}>
-                <Text style={styles.reminderLabel} numberOfLines={1}>
-                  {item.result.label}
-                </Text>
-                <View style={styles.shelfLifeBadge}>
-                  <MaterialCommunityIcons
-                    name="clock-outline"
-                    size={12}
-                    color="#fff"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={styles.shelfLifeText}>
-                    {item.result.analysis?.shelfLife || "N/A"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={styles.emptyCard}>
-          <MaterialCommunityIcons
-            name="bell-sleep-outline"
-            size={32}
-            color="#bdbdbd"
-            style={{ marginBottom: 8 }}
-          />
-          <Text style={styles.emptyText}>Belum ada pengingat aktif.</Text>
-          <Text style={styles.emptySubText}>
-            Nyalakan ikon lonceng pada menu Riwayat untuk memantau masa simpan
-            buah di sini.
-          </Text>
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={styles.scanButton}
-        onPress={() => router.push("/scanner")}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <MaterialCommunityIcons name="magnify-scan" size={24} color="#fff" />
-        <Text style={styles.scanButtonText}>Mulai Pindai Buah Baru</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* Header Merah */}
+        <View style={styles.headerSection}>
+          {/* Top Bar: Logo Freshia & Foto Profil Kanan Atas */}
+          <View style={styles.topBar}>
+            <Image
+              source={require("../../../assets/images/freshia-logo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/profile")}
+              activeOpacity={0.8}
+              style={styles.profileAvatarButton}
+            >
+              {user?.photoURL ? (
+                <Image
+                  source={{ uri: user.photoURL }}
+                  style={styles.profileAvatar}
+                />
+              ) : (
+                <View style={styles.profileAvatarFallback}>
+                  <Ionicons name="person" size={22} color="#9A1B17" />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Sapaan Pengguna */}
+          <View style={styles.greetingContainer}>
+            <Text style={styles.greetingTitle}>Hi, {displayName}!</Text>
+            <Text style={styles.greetingSubtitle}>
+              Yuk jaga buah-buahanmu tetap segar{"\n"}dan nikmati setiap
+              gigitannya!
+            </Text>
+          </View>
+        </View>
+
+        {/* Konten Putih Melengkung */}
+        <View style={styles.whiteBody}>
+          {/* Maskot Buah Freshia bertengger di kanan batas merah-putih */}
+          <Image
+            source={require("../../../assets/images/buah freshia.png")}
+            style={styles.buahFreshiaMascot}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.welcomeHeading}>Welcome to Freshia</Text>
+
+          {/* Banner 1: Peringatan Tanggal Busuk */}
+          <TouchableOpacity
+            style={styles.alertBanner}
+            activeOpacity={0.85}
+            onPress={() => router.push("/reminder")}
+          >
+            <View style={styles.alertBellCircle}>
+              <Ionicons name="notifications" size={24} color="#9A1B17" />
+            </View>
+            <View style={styles.alertTextBox}>
+              <Text style={styles.alertTitle}>
+                Ada Buah yang{"\n"}mendekati tanggal busuk !
+              </Text>
+              <Text style={styles.alertSubtitle}>
+                Cek sekarang agar tidak terbuang
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color="#1C1C1E" />
+          </TouchableOpacity>
+
+          {/* Kartu 2: Reminder Buah */}
+          <View style={styles.reminderCard}>
+            <View style={styles.reminderHeader}>
+              <View>
+                <Text style={styles.reminderTitle}>Reminder Buah</Text>
+                <Text style={styles.reminderSubtitle}>
+                  Buah yang hampir busuk
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.smallBellCircle}
+                activeOpacity={0.8}
+                onPress={() => router.push("/reminder")}
+              >
+                <Ionicons name="notifications" size={18} color="#9A1B17" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Kotak Putih Kosong jika belum ada buah hampir busuk */}
+            {reminders.length === 0 ? (
+              <View style={styles.emptyReminderBox}>
+                <Text style={styles.emptyReminderText}>
+                  Belum ada buah yang mendekati tanggal busuk
+                </Text>
+              </View>
+            ) : (
+              reminders.map((item) => (
+                <View key={item.id} style={styles.fruitItemRow}>
+                  <View style={styles.fruitInfo}>
+                    <Text style={styles.fruitName}>{item.name}</Text>
+                    <View style={styles.timeRow}>
+                      <Ionicons name="time-outline" size={14} color="#C8201B" />
+                      <Text style={styles.timeText}>{item.daysLeft}</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.detailButton}
+                    activeOpacity={0.85}
+                    onPress={() => router.push("/(tabs)/history")}
+                  >
+                    <Text style={styles.detailButtonText}>Lihat Detail ›</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Kartu 3: Promo Resep ("Jangan biarkan buahmu terbuang!") */}
+          <View style={styles.recipePromoCard}>
+            {/* Hiasan Daun Pojok Kanan Atas */}
+            <Image
+              source={require("../../../assets/images/daun.png")}
+              style={styles.leafTopRight}
+              resizeMode="contain"
+            />
+
+            {/* Hiasan Daun Pojok Kiri Bawah */}
+            <Image
+              source={require("../../../assets/images/daun.png")}
+              style={styles.leafBottomLeft}
+              resizeMode="contain"
+            />
+
+            <View style={styles.recipeLeftContent}>
+              <Text style={styles.recipeQuoteTitle}>
+                “Jangan biarkan{"\n"}buahmu terbuang!”
+              </Text>
+              <Text style={styles.recipeDesc}>
+                Temukan resep mudah dan sehat dari buah yang kamu punya.
+              </Text>
+              <TouchableOpacity
+                style={styles.recipeButton}
+                activeOpacity={0.85}
+                onPress={() => router.push("/(tabs)/resep")}
+              >
+                <Text style={styles.recipeButtonText}>Lihat Resep ›</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Ilustrasi Apel Makan */}
+            <Image
+              source={require("../../../assets/images/apel makan.png")}
+              style={styles.apelMakanImage}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
-  content: { padding: 20, paddingBottom: 40 },
-  header: {
+  root: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: "#FFFBFB",
+    paddingBottom: 110,
+  },
+  headerSection: {
+    backgroundColor: "#C8201B",
+    paddingTop: Platform.OS === "ios" ? 56 : 36,
+    paddingHorizontal: 22,
+    paddingBottom: 62,
+  },
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 25,
-    marginTop: 10,
+    marginBottom: 18,
   },
-  greeting: { fontSize: 24, fontWeight: "bold", color: "#1b5e20" },
-  subtitle: { fontSize: 14, color: "#666", marginTop: 4 },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 15,
+  logo: {
+    width: 115,
+    height: 40,
   },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 15,
-    paddingRight: 5,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 30,
-  },
-  statCard: {
-    width: "31%",
-    padding: 15,
-    borderRadius: 15,
-    alignItems: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#333",
-    marginVertical: 8,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#555",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  reminderScroll: { marginBottom: 30 },
-  reminderCard: {
-    width: 140,
-    height: 160,
-    marginRight: 15,
-    borderRadius: 15,
+  profileAvatarButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
     overflow: "hidden",
-    backgroundColor: "#fff",
-    elevation: 3,
-  },
-  reminderImage: { width: "100%", height: "100%" },
-  reminderOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 10,
-  },
-  reminderLabel: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  shelfLifeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fbc02d",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  shelfLifeText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
-  emptyCard: {
-    backgroundColor: "#fff",
-    padding: 25,
-    borderRadius: 15,
-    alignItems: "center",
-    marginBottom: 30,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderStyle: "dashed",
-  },
-  emptyText: { color: "#555", fontWeight: "bold", fontSize: 14 },
-  emptySubText: {
-    color: "#888",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 5,
-  },
-  scanButton: {
-    backgroundColor: "#2e7d32",
-    flexDirection: "row",
-    padding: 15,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
-  scanButtonText: {
-    color: "#fff",
+  profileAvatar: {
+    width: 42,
+    height: 42,
+  },
+  profileAvatarFallback: {
+    width: 42,
+    height: 42,
+    backgroundColor: "#FDECEC",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  greetingContainer: {
+    paddingRight: 20,
+  },
+  greetingTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 6,
+  },
+  greetingSubtitle: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    color: "#FDECEC",
+  },
+
+  /* Body Putih Melengkung */
+  whiteBody: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginTop: -24,
+    paddingTop: 22,
+    paddingHorizontal: 20,
+    position: "relative",
+  },
+  buahFreshiaMascot: {
+    position: "absolute",
+    top: -62,
+    right: 14,
+    width: 175,
+    height: 92,
+    zIndex: 10,
+  },
+  welcomeHeading: {
     fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 10,
+    fontWeight: "700",
+    color: "#8E1612",
+    marginBottom: 14,
+  },
+
+  /* Banner 1: Alert */
+  alertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FCE8E8",
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  alertBellCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#F8CACA",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  alertTextBox: {
+    flex: 1,
+    paddingRight: 6,
+  },
+  alertTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#9A1B17",
+    lineHeight: 18,
+    marginBottom: 3,
+  },
+  alertSubtitle: {
+    fontSize: 11.5,
+    color: "#333333",
+  },
+
+  /* Kartu 2: Reminder Buah */
+  reminderCard: {
+    backgroundColor: "#FCE8E8",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+  },
+  reminderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  reminderTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#9A1B17",
+    marginBottom: 2,
+  },
+  reminderSubtitle: {
+    fontSize: 12,
+    color: "#9A1B17",
+  },
+  smallBellCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F8CACA",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyReminderBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    height: 68,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  emptyReminderText: {
+    fontSize: 12,
+    color: "#9E9E9E",
+    textAlign: "center",
+  },
+  fruitItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+  },
+  fruitInfo: {
+    flex: 1,
+  },
+  fruitName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1C1C1E",
+    marginBottom: 4,
+  },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  timeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#C8201B",
+  },
+  detailButton: {
+    backgroundColor: "#C8201B",
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 16,
+  },
+  detailButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+
+  /* Kartu 3: Jangan biarkan buahmu terbuang */
+  recipePromoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FCE8E8",
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingLeft: 18,
+    paddingRight: 8,
+    overflow: "hidden",
+    position: "relative",
+    minHeight: 175,
+  },
+  leafTopRight: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 44,
+    height: 36,
+    transform: [{ rotate: "15deg" }],
+  },
+  leafBottomLeft: {
+    position: "absolute",
+    bottom: -6,
+    left: -6,
+    width: 46,
+    height: 38,
+    transform: [{ rotate: "-25deg" }],
+  },
+  recipeLeftContent: {
+    flex: 1.15,
+    zIndex: 2,
+  },
+  recipeQuoteTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#9A1B17",
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  recipeDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: "#9A1B17",
+    marginBottom: 14,
+  },
+  recipeButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#C8201B",
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+  recipeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11.5,
+    fontWeight: "600",
+  },
+  apelMakanImage: {
+    width: 145,
+    height: 145,
+    zIndex: 2,
   },
 });

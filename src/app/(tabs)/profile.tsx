@@ -22,10 +22,12 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setImgError(false);
     });
     return unsubscribe;
   }, []);
@@ -92,8 +94,27 @@ export default function ProfileScreen() {
         {/* Foto Profil & Identitas User */}
         <View style={styles.profileInfo}>
           <View style={styles.avatarWrapper}>
-            {user?.photoURL ? (
-              <Image source={{ uri: user.photoURL }} style={styles.avatar} />
+            {user?.photoURL && !imgError ? (
+              Platform.OS === "web" ? (
+                <img
+                  src={user.photoURL}
+                  alt="Profile"
+                  referrerPolicy="no-referrer"
+                  onError={() => setImgError(true)}
+                  style={{
+                    width: 104,
+                    height: 104,
+                    borderRadius: 52,
+                    objectFit: "cover",
+                  }}
+                />
+              ) : (
+                <Image
+                  source={{ uri: user.photoURL }}
+                  style={styles.avatar}
+                  onError={() => setImgError(true)}
+                />
+              )
             ) : (
               <View style={styles.avatarFallback}>
                 <Ionicons name="person" size={54} color="#9A1B17" />
@@ -245,12 +266,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   avatar: {
-    width: "100%",
-    height: "100%",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
   },
   avatarFallback: {
-    width: "100%",
-    height: "100%",
+    width: 104,
+    height: 104,
     backgroundColor: "#FDECEC",
     justifyContent: "center",
     alignItems: "center",
