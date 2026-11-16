@@ -1,314 +1,610 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useRouter } from "expo-router";
-import { deleteDoc, doc } from "firebase/firestore";
-import { useCallback, useState } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  FlatList,
   Image,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
+import { auth } from "../../firebaseConfig";
 
-// Dialog konfirmasi lintas platform.
-// Alert.alert dengan tombol tidak berfungsi di web, jadi web memakai window.confirm.
-const confirmAction = (
-  title: string,
-  message: string,
-  confirmText: string,
-  onConfirm: () => void,
-) => {
-  if (Platform.OS === "web") {
-    if (window.confirm(`${title}\n\n${message}`)) onConfirm();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: "Batal", style: "cancel" },
-    { text: confirmText, style: "destructive", onPress: onConfirm },
-  ]);
-};
+export interface ScanHistoryItem {
+  id: string;
+  fruitName: string; // Contoh: "Pisang" -> tampil sebagai "Scanned Pisang"
+  dateTime: string; // Contoh: "23 September 2026 • 13.00 WIB"
+  mode: "Mode Bisnis" | "Mode Pribadi";
+  freshnessPercent: number; // Contoh: 90 atau 15
+  status: "diproses" | "butuh_perhatian";
+  imageUri?: string;
+}
 
-// Hapus dokumen di Firestore. Entri lama tanpa firestoreId dilewati.
-const deleteFromCloud = async (item: any) => {
-  if (!item?.firestoreId) return;
-  try {
-    await deleteDoc(doc(db, "scan_history", item.firestoreId));
-  } catch (e) {
-    console.warn("Gagal hapus dokumen Firestore", e);
-  }
-};
-
-// Baca riwayat TERBARU langsung dari AsyncStorage (bukan dari state layar).
-// Penting karena firestoreId ditulis ke AsyncStorage oleh scanner.tsx
-// beberapa detik setelah layar Riwayat memuat datanya.
-const getFreshHistory = async (): Promise<any[]> => {
-  const stored = await AsyncStorage.getItem("@freshia_history");
-  return stored ? JSON.parse(stored) : [];
-};
+type FilterTab = "terbaru" | "diproses" | "butuh_perhatian";
 
 export default function HistoryScreen() {
-  const [historyData, setHistoryData] = useState<any[]>([]);
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [imgError, setImgError] = useState(false);
 
-  const loadHistory = async () => {
-    try {
-      const storedData = await AsyncStorage.getItem("@freshia_history");
-      setHistoryData(storedData ? JSON.parse(storedData) : []);
-    } catch (e) {
-      console.error("Gagal memuat riwayat", e);
-    }
-  };
+  // Dikosongkan dulu secara default karena belum ada riwayat scan
+  const [historyList] = useState<ScanHistoryItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("terbaru");
 
-  useFocusEffect(
-    useCallback(() => {
-      loadHistory();
-    }, []),
-  );
-
-  // Toggle pengingat masa simpan
-  const toggleReminder = async (id: string) => {
-    try {
-      const current = await getFreshHistory();
-      const updatedHistory = current.map((item) =>
-        item.id === id ? { ...item, isTracked: !item.isTracked } : item,
-      );
-      setHistoryData(updatedHistory);
-      await AsyncStorage.setItem(
-        "@freshia_history",
-        JSON.stringify(updatedHistory),
-      );
-    } catch (e) {
-      console.error("Gagal menyimpan pengingat", e);
-    }
-  };
-
-  // Hapus SATU item (lokal + Firestore)
-  const deleteItem = (id: string) => {
-    confirmAction(
-      "Hapus Riwayat",
-      "Apakah Anda yakin ingin menghapus data buah ini?",
-      "Hapus",
-      async () => {
-        try {
-          const current = await getFreshHistory();
-          const target = current.find((item) => item.id === id);
-          const updatedHistory = current.filter((item) => item.id !== id);
-          setHistoryData(updatedHistory);
-          await AsyncStorage.setItem(
-            "@freshia_history",
-            JSON.stringify(updatedHistory),
-          );
-          console.log(
-            "Hapus, firestoreId:",
-            target?.firestoreId ?? "(tidak ada)",
-          );
-          await deleteFromCloud(target);
-        } catch (e) {
-          console.error("Gagal menghapus riwayat spesifik", e);
-        }
-      },
-    );
-  };
-
-  // Hapus SEMUA item (lokal + Firestore)
-  const clearHistory = () => {
-    confirmAction(
-      "Hapus Semua?",
-      "Apakah Anda yakin ingin menghapus SELURUH riwayat pindai?",
-      "Hapus Semua",
-      async () => {
-        try {
-          const snapshot = await getFreshHistory();
-          await AsyncStorage.removeItem("@freshia_history");
-          setHistoryData([]);
-
-          await Promise.all(snapshot.map(deleteFromCloud));
-        } catch (e) {
-          console.error("Gagal menghapus semua riwayat", e);
-        }
-      },
-    );
-  };
-
-  // Buka detail (navigasi ke Result)
-  const openDetails = (item: any) => {
-    router.push({
-      pathname: "/result",
-      params: {
-        detection: item.result?.label ?? "Unknown",
-
-        analysis: JSON.stringify(item.result?.analysis || {}),
-      },
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setImgError(false);
     });
-  };
+    return unsubscribe;
+  }, []);
 
-  const renderItem = ({ item }: { item: any }) => {
-    const label: string = item.result?.label ?? "Unknown";
-    const rawLabel = label.toLowerCase();
-    const isRotten =
-      rawLabel.includes("rotten") ||
-      rawLabel.includes("busuk") ||
-      rawLabel.includes("layu");
-    const statusColor = isRotten ? "#d32f2f" : "#388e3c";
+  const displayName =
+    user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
 
-    const shelfLife = item.result?.analysis?.shelfLife || "Tidak ada data";
+  const filteredHistory = useMemo(() => {
+    return historyList.filter((item) => {
+      const keyword = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        keyword === "" ||
+        item.fruitName.toLowerCase().includes(keyword) ||
+        `scanned ${item.fruitName}`.toLowerCase().includes(keyword) ||
+        item.mode.toLowerCase().includes(keyword) ||
+        item.dateTime.toLowerCase().includes(keyword);
 
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.7}
-        onPress={() => openDetails(item)}
-      >
-        <Image source={{ uri: item.image }} style={styles.cardImage} />
+      if (!matchesSearch) return false;
 
-        <View style={styles.cardContent}>
-          <Text style={styles.dateText}>{item.date}</Text>
-          <Text style={[styles.resultText, { color: statusColor }]}>
-            {label.toUpperCase()}
-          </Text>
-          <Text style={styles.infoText}>
-            Akurasi: {item.result?.confidence ?? "-"}%
-          </Text>
-
-          <Text style={styles.infoText}>Sisa Umur: {shelfLife}</Text>
-        </View>
-
-        <View style={styles.actionContainer}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => toggleReminder(item.id)}
-          >
-            <MaterialCommunityIcons
-              name={item.isTracked ? "bell-ring" : "bell-outline"}
-              size={24}
-              color={item.isTracked ? "#fbc02d" : "#bdbdbd"}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => deleteItem(item.id)}
-          >
-            <MaterialCommunityIcons
-              name="trash-can-outline"
-              size={24}
-              color="#d32f2f"
-            />
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+      if (activeFilter === "diproses") {
+        return item.status === "diproses" || item.freshnessPercent >= 50;
+      }
+      if (activeFilter === "butuh_perhatian") {
+        return item.status === "butuh_perhatian" || item.freshnessPercent < 50;
+      }
+      return true;
+    });
+  }, [historyList, searchQuery, activeFilter]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Riwayat Pindai</Text>
-        {historyData.length > 0 && (
-          <TouchableOpacity onPress={clearHistory} style={styles.clearAllBtn}>
-            <MaterialCommunityIcons
-              name="delete-sweep-outline"
-              size={20}
-              color="#d32f2f"
-            />
-            <Text style={styles.clearBtnText}>Hapus Semua</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    <View style={styles.root}>
+      <StatusBar style="light" />
 
-      {historyData.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons
-            name="history"
-            size={60}
-            color="#e0e0e0"
-            style={{ marginBottom: 15 }}
-          />
-          <Text style={styles.emptyText}>Belum ada buah yang dipindai.</Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header Merah */}
+        <View style={styles.headerSection}>
+          {/* Top Bar: Logo Freshia & Foto Profil Kanan Atas */}
+          <View style={styles.topBar}>
+            <Image
+              source={require("../../../assets/images/freshia-logo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/profile")}
+              activeOpacity={0.8}
+              style={styles.profileAvatarButton}
+            >
+              {user?.photoURL && !imgError ? (
+                Platform.OS === "web" ? (
+                  <img
+                    src={user.photoURL}
+                    alt="Profile"
+                    referrerPolicy="no-referrer"
+                    onError={() => setImgError(true)}
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 21,
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: user.photoURL }}
+                    style={styles.profileAvatar}
+                    onError={() => setImgError(true)}
+                  />
+                )
+              ) : (
+                <View style={styles.profileAvatarFallback}>
+                  <Ionicons name="person" size={22} color="#9A1B17" />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Sapaan Pengguna */}
+          <View style={styles.greetingContainer}>
+            <Text style={styles.greetingTitle}>Hi, {displayName}!</Text>
+            <Text style={styles.greetingSubtitle}>
+              Yuk jaga buah-buahanmu tetap segar{"\n"}dan nikmati setiap
+              gigitannya!
+            </Text>
+          </View>
         </View>
-      ) : (
-        <FlatList
-          data={historyData}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
+
+        {/* Konten Putih Melengkung */}
+        <View style={styles.whiteBody}>
+          {/* Maskot Buah Freshia bertengger di kanan batas merah-putih */}
+          <Image
+            source={require("../../../assets/images/buah freshia.png")}
+            style={styles.buahFreshiaMascot}
+            resizeMode="contain"
+          />
+
+          <Text style={styles.sectionTitle}>Daftar Hasil Scan</Text>
+          <Text style={styles.sectionSubtitle}>
+            Riwayat buah yang pernah kamu scan
+          </Text>
+
+          {/* Search Bar: Cari Riwayat */}
+          <View style={styles.searchBox}>
+            <Ionicons
+              name="search-outline"
+              size={20}
+              color="#9E9E9E"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Cari Riwayat"
+              placeholderTextColor="#9E9E9E"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close-circle" size={18} color="#9E9E9E" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Filter Pills: Terbaru | Diproses | Butuh Perhatian */}
+          <View style={styles.filterRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                activeFilter === "terbaru" && styles.filterPillActive,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setActiveFilter("terbaru")}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  activeFilter === "terbaru" && styles.filterPillTextActive,
+                ]}
+              >
+                Terbaru
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                activeFilter === "diproses" && styles.filterPillActive,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setActiveFilter("diproses")}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  activeFilter === "diproses" && styles.filterPillTextActive,
+                ]}
+              >
+                Diproses
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                activeFilter === "butuh_perhatian" && styles.filterPillActive,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setActiveFilter("butuh_perhatian")}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  activeFilter === "butuh_perhatian" &&
+                    styles.filterPillTextActive,
+                ]}
+              >
+                Butuh Perhatian
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Daftar Riwayat atau Empty State */}
+          {filteredHistory.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <MaterialCommunityIcons
+                  name="file-document-outline"
+                  size={34}
+                  color="#9A1B17"
+                />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {historyList.length === 0
+                  ? "Belum Ada Riwayat Scan"
+                  : "Riwayat Tidak Ditemukan"}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {historyList.length === 0
+                  ? "Hasil pemindaian buahmu akan otomatis tersimpan dan muncul di halaman ini."
+                  : "Coba ubah kata kunci pencarian atau pilih kategori filter lainnya."}
+              </Text>
+              {historyList.length === 0 && (
+                <TouchableOpacity
+                  style={styles.scanNowButton}
+                  activeOpacity={0.85}
+                  onPress={() => router.push("/(tabs)/scanner")}
+                >
+                  <Text style={styles.scanNowButtonText}>Mulai Scan Buah</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            filteredHistory.map((item) => {
+              const isFresh = item.freshnessPercent >= 50;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.historyCard}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/result",
+                      params: { id: item.id, name: item.fruitName },
+                    })
+                  }
+                >
+                  {/* Foto Hasil Scan */}
+                  <View style={styles.thumbnailWrapper}>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={styles.thumbnailImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.thumbnailFallback}>
+                        <MaterialCommunityIcons
+                          name="food-apple"
+                          size={30}
+                          color="#9A1B17"
+                        />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Detail Tengah & Badge Persentase Kanan */}
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardTopRow}>
+                      <Text style={styles.scannedTitle} numberOfLines={1}>
+                        Scanned {item.fruitName}
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.freshBadge,
+                          isFresh
+                            ? styles.freshBadgeGood
+                            : styles.freshBadgeWarn,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.freshBadgeText,
+                            isFresh
+                              ? styles.freshBadgeTextGood
+                              : styles.freshBadgeTextWarn,
+                          ]}
+                        >
+                          Fresh {item.freshnessPercent}%
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.dateTimeText}>{item.dateTime}</Text>
+                    <Text style={styles.modeText}>{item.mode}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  header: {
+  root: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: "#FFFBFB",
+    paddingBottom: 110,
+  },
+  headerSection: {
+    backgroundColor: "#C8201B",
+    paddingTop: Platform.OS === "ios" ? 56 : 36,
+    paddingHorizontal: 22,
+    paddingBottom: 62,
+  },
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    marginBottom: 18,
   },
-  title: { fontSize: 22, fontWeight: "bold", color: "#1b5e20" },
-
-  clearAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffebee",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+  logo: {
+    width: 115,
+    height: 40,
   },
-  clearBtnText: {
-    color: "#d32f2f",
-    fontWeight: "bold",
-    marginLeft: 4,
-    fontSize: 12,
-  },
-
-  card: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    marginHorizontal: 15,
-    marginTop: 15,
-    borderRadius: 12,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  profileAvatarButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
     overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  cardImage: { width: 100, height: 100, backgroundColor: "#ddd" },
-  cardContent: { padding: 12, flex: 1, justifyContent: "center" },
-  dateText: { fontSize: 11, color: "#757575", marginBottom: 4 },
-  resultText: { fontSize: 16, fontWeight: "bold" },
-
-  infoText: { fontSize: 13, color: "#555", marginTop: 2 },
-
-  actionContainer: {
-    justifyContent: "space-between",
-    borderLeftWidth: 1,
-    borderLeftColor: "#f0f0f0",
-    backgroundColor: "#fafafa",
+  profileAvatar: {
+    width: 42,
+    height: 42,
   },
-  actionButton: {
+  profileAvatarFallback: {
+    width: 42,
+    height: 42,
+    backgroundColor: "#FDECEC",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  greetingContainer: {
+    paddingRight: 20,
+  },
+  greetingTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 6,
+  },
+  greetingSubtitle: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    color: "#FDECEC",
+  },
+
+  /* Body Putih Melengkung */
+  whiteBody: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginTop: -24,
+    paddingTop: 22,
+    paddingHorizontal: 20,
+    position: "relative",
+  },
+  buahFreshiaMascot: {
+    position: "absolute",
+    top: -62,
+    right: 14,
+    width: 175,
+    height: 92,
+    zIndex: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#8E1612",
+    marginBottom: 3,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: "#9A1B17",
+    marginBottom: 14,
+  },
+
+  /* Search Bar */
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#9A1B17",
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    height: 44,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13.5,
+    color: "#1C1C1E",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+  },
+
+  /* Filter Pills */
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
+  filterPill: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2DADA",
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  filterPillActive: {
+    backgroundColor: "#FCE8E8",
+    borderColor: "#9A1B17",
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#8E8E93",
+  },
+  filterPillTextActive: {
+    color: "#9A1B17",
+    fontWeight: "600",
+  },
+
+  /* Empty State */
+  emptyCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#F0E2E2",
+    borderRadius: 18,
+    paddingVertical: 36,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FCE8E8",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#9A1B17",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 12.5,
+    color: "#666666",
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  scanNowButton: {
+    backgroundColor: "#C8201B",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  scanNowButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  /* Kartu Item Riwayat Scan */
+  historyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E8E2E2",
+    borderRadius: 12,
     padding: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1,
+    marginBottom: 12,
   },
-
-  emptyContainer: {
-    flex: 1,
+  thumbnailWrapper: {
+    width: 68,
+    height: 68,
+    borderRadius: 6,
+    overflow: "hidden",
+    backgroundColor: "#FDECEC",
+    marginRight: 12,
+  },
+  thumbnailImage: {
+    width: 68,
+    height: 68,
+  },
+  thumbnailFallback: {
+    width: 68,
+    height: 68,
     justifyContent: "center",
     alignItems: "center",
-    padding: 30,
   },
-  emptyText: { fontSize: 16, fontWeight: "bold", color: "#888" },
+  cardContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    marginBottom: 5,
+  },
+  scannedTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1C1C1E",
+  },
+  freshBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 11,
+    borderRadius: 12,
+  },
+  freshBadgeGood: {
+    backgroundColor: "#D8F5DC",
+  },
+  freshBadgeWarn: {
+    backgroundColor: "#FCE0E0",
+  },
+  freshBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  freshBadgeTextGood: {
+    color: "#32A852",
+  },
+  freshBadgeTextWarn: {
+    color: "#E03A3E",
+  },
+  dateTimeText: {
+    fontSize: 11.5,
+    color: "#333333",
+    marginBottom: 5,
+  },
+  modeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1C1C1E",
+  },
 });
