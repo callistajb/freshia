@@ -16,6 +16,7 @@ export default function RootLayout() {
       <Stack.Screen name="signin" />
       <Stack.Screen name="forgot-password" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="reminder" />
       <Stack.Screen
         name="result"
         options={{ headerShown: true, title: "Hasil Analisis" }}
