@@ -25,10 +25,10 @@ import { auth, db } from "../../firebaseConfig";
 
 // --- PENGATURAN MODEL GEMINI ---
 const GEMINI_MODELS: string[] = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-].filter((name, index, list) => list.indexOf(name) === index);
+  "gemini-3.8-flash",
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || "",
+].filter((name, index, list) => Boolean(name) && list.indexOf(name) === index);
 
 // Kompres gambar ke Base64 kecil agar permanen disimpan di AsyncStorage & Firestore (maks 1MB/dokumen)
 const createPersistentThumbnail = async (
@@ -98,45 +98,60 @@ const callGeminiModel = async (
   base64Image: string,
 ) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            detectedFruitName: { type: "STRING" },
-            freshnessPercentage: { type: "NUMBER" },
-            salvageValue: { type: "STRING" },
-            shelfLife: { type: "STRING" },
-            recipe: { type: "STRING" },
-          },
-          required: [
-            "detectedFruitName",
-            "freshnessPercentage",
-            "salvageValue",
-            "shelfLife",
-            "recipe",
-          ],
-        },
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
       },
-    }),
-  });
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: "image/jpeg", data: base64Image } },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              detectedFruitName: { type: "STRING" },
+              freshnessPercentage: { type: "NUMBER" },
+              salvageValue: { type: "STRING" },
+              shelfLife: { type: "STRING" },
+              recipe: { type: "STRING" },
+            },
+            required: [
+              "detectedFruitName",
+              "freshnessPercentage",
+              "salvageValue",
+              "shelfLife",
+              "recipe",
+            ],
+          },
+        },
+      }),
+    });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      const timeoutErr: any = new Error("Waktu tunggu Gemini habis (timeout)");
+      timeoutErr.status = 503;
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const data = await response.json();
 
@@ -374,11 +389,8 @@ export default function ScannerScreen() {
     }
   };
 
-  // Panggil Gemini API dengan rubrik penilaian visual buah yang ketat & akurat
-  const analyzeWithGemini = async (
-    base64Image: string,
-    roboflowLabel: string,
-  ) => {
+  // Panggil Gemini API dengan analisis visual murni & rubrik penilaian ketat
+  const analyzeWithGemini = async (base64Image: string) => {
     const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
       throw new Error("Gemini API Key belum diatur di .env");
@@ -389,31 +401,29 @@ export default function ScannerScreen() {
         ? `Mode Bisnis (stok komersial/keranjang). Dimensi wadah: Panjang ${panjang || "-"} cm, Lebar ${lebar || "-"} cm, Tinggi ${tinggi || "-"} cm.`
         : `Mode Pribadi (konsumsi rumah tangga). Estimasi berat buah: ${berat || "-"} gram/kg.`;
 
-    const prompt = `Kamu adalah ahli agronomi dan quality control buah segar tingkat profesional untuk aplikasi Freshia.
-Tugasmu adalah memeriksa gambar secara visual dan mengabaikan label deteksi awal jika keliru.
-
-Informasi tambahan dari sistem:
-- Deteksi awal Roboflow: "${roboflowLabel}" (gunakan hanya sebagai referensi, prioritaskan analisis visual foto asli!).
-- Parameter pengguna: ${detailParameter}
+    const prompt = `Kamu adalah ahli agronomi dan botani buah profesional untuk aplikasi Freshia.
+Analisis gambar buah ini secara visual murni dari nol.
+Parameter pengguna: ${detailParameter}
 
 ATURAN PENILAIAN WAJIB:
 1. VALIDASI OBJEK BUKAN BUAH:
-   - Periksa apakah di dalam foto benar-benar terdapat buah asli (segar, matang, maupun busuk).
-   - Jika foto berisi benda mati, tembok, wajah, layar, teks, atau bukan buah sama sekali: wajib kembalikan "detectedFruitName": "Bukan Buah", "freshnessPercentage": 0, "salvageValue": "Rp0", "shelfLife": "0 hari", dan "recipe": "Tidak ada buah yang terdeteksi dalam gambar.".
+   - Jika foto berisi benda mati, tembok, wajah, layar, teks, atau bukan buah sama sekali: kembalikan "detectedFruitName": "Bukan Buah", "freshnessPercentage": 0, "salvageValue": "Rp0", "shelfLife": "0 hari", dan "recipe": "Tidak ada buah yang terdeteksi dalam gambar.".
 
-2. IDENTIFIKASI NAMA BUAH SPESIFIK:
-   - Jika gambar adalah buah, tulis nama spesifik buah dalam Bahasa Indonesia yang rapi (contoh: "Pisang", "Pisang Cavendish", "Apel Merah", "Stroberi", "Mangga", "Jeruk"). Jangan menulis "Buah" saja jika jenis buahnya terlihat jelas.
+2. IDENTIFIKASI NAMA BUAH SPESIFIK (TERMASUK BUAH LANGKA/EKSOTIS):
+   - Amati ciri botani kulit, bentuk, dan tangkai secara teliti.
+   - Buah berkulit keras/berkayu kuning kecokelatan berbentuk bulat dengan bercak alami seperti Bael (Maja / Aegle marmelos) WAJIB dinamai "Buah Bael (Maja)", JANGAN disebut Kedondong atau Jeruk.
+   - Tulis nama buah yang paling tepat dalam Bahasa Indonesia (contoh: "Buah Bael (Maja)", "Pisang", "Apel Merah", "Kedondong", "Sawo", "Srikaya").
 
-3. RUBRIK PENILAIAN KESEGARAN VISUAL (0 - 100):
-   - 85% - 100% (Sangat Segar): Kulit mulus, warna cerah alami (kuning cerah/hijau kekuningan pada pisang, merah cerah pada apel/stroberi), tangkai masih kokoh/hijau, tidak ada jamur atau memar berair.
-   - 70% - 84% (Segar & Matang Optimal): Buah matang siap makan. CATATAN KHUSUS PISANG: Bintik-bintik cokelat kecil alami (sugar spots) pada pisang matang yang kulitnya masih utuh dan kencang BUKANLAH busuk, beri nilai antara 75% - 85%.
-   - 45% - 69% (Cukup Segar / Mulai Layu): Kulit mulai keriput, warna kusam, atau terdapat memar ringan lokal tanpa jamur.
-   - 1% - 44% (Hampir Busuk / Busuk): Kulit menghitam meluas, lembek berair, berjamur putih/hijau, atau membusuk.
+3. RUBRIK PENILAIAN KESEGARAN VISUAL KETAT (0 - 100):
+   - 85% - 100% (Sangat Segar): Kulit mulus, warna cerah seragam, tangkai hijau/kokoh, tanpa memar, retak, atau bercak cokelat.
+   - 65% - 84% (Segar / Matang Siap Konsumsi): Buah matang optimal dengan kulit kencang. Pada pisang, hanya boleh ada bintik cokelat sangat kecil terpisah (<10% permukaan kulit) dan tangkai masih kuning/hijau.
+   - 40% - 64% (Menurun / Harus Segera Diolah): Kulit mulai kusam, keriput ringan, bercak cokelat mulai melebar (15% - 30% permukaan), atau ujung tangkai mulai mengering/menghitam. Sisa masa simpan maksimal 1 hari.
+   - 1% - 39% (Tidak Segar / Hampir Busuk / Busuk): Bercak cokelat/hitam sudah melebar dan menyatu (>30% permukaan kulit seperti pisang terlalu matang/busuk), tangkai hitam layu, kulit lembek berair, retak, atau berjamur. Wajib beri skor di bawah 35% dan masa simpan "Hari ini terakhir".
 
 4. KALKULASI EKONOMI & MASA SIMPAN:
-   - "salvageValue": Jika Mode Bisnis, hitung estimasi harga jual wajar & estimasi keuntungan dalam format "Rp25.000 | Rp8.000" berdasarkan volume wadah (P x L x T) atau jumlah buah di foto. Jika Mode Pribadi, tulis estimasi nilai ekonomisnya seperti "Rp15.000".
-   - "shelfLife": Prediksi sisa hari layak konsumsi/jual (contoh: "4 - 5 hari lagi" atau "3 hari lagi").
-   - "recipe": Berikan 2 ide olahan resep zero-waste singkat sesuai jenis buahnya dalam Bahasa Indonesia dengan format "Nama Resep 1: deskripsi singkat\nNama Resep 2: deskripsi singkat".
+   - "salvageValue": Jika Mode Bisnis, hitung estimasi harga jual wajar & estimasi keuntungan dalam format "Rp25.000 | Rp8.000" berdasarkan dimensi wadah (P x L x T) atau kondisi buah. Jika Mode Pribadi, tulis estimasi nilai ekonomisnya seperti "Rp15.000" (turunkan drastis jika skor < 40%).
+   - "shelfLife": Prediksi sisa hari layak konsumsi (contoh: "4 - 5 hari lagi", "1 hari lagi", atau "Hari ini terakhir").
+   - "recipe": Berikan 2 ide olahan resep zero-waste singkat sesuai jenis buahnya (jika hampir busuk, sarankan olahan matang seperti bolu pisang/smoothie; jika masih segar, sarankan olahan segar) dengan format "Nama Resep 1: deskripsi singkat\nNama Resep 2: deskripsi singkat".
 
 Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backticks.`;
 
@@ -481,11 +491,20 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
         }
       }
 
-      // B. GEMINI ANALYSIS
+      // B. GEMINI ANALYSIS (dengan 1x retry otomatis jika 503 high demand & fallback cerdas ke Roboflow)
       let geminiAnalysis = null;
       try {
-        geminiAnalysis = await analyzeWithGemini(rawBase64, rawClass);
-        // Gunakan nama buah spesifik dari Gemini jika Roboflow hanya mengembalikan label umum/keliru
+        try {
+          geminiAnalysis = await analyzeWithGemini(rawBase64);
+        } catch (firstErr: any) {
+          if (firstErr?.status === 503 || firstErr?.status === 429) {
+            await new Promise((r) => setTimeout(r, 1200));
+            geminiAnalysis = await analyzeWithGemini(rawBase64);
+          } else {
+            throw firstErr;
+          }
+        }
+
         if (
           geminiAnalysis.detectedFruitName &&
           geminiAnalysis.detectedFruitName.toLowerCase() !== "bukan buah"
@@ -497,14 +516,39 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
           rawClass = "Buah";
         }
       } catch (err: any) {
-        console.warn("Gemini Error:", err.message);
-        geminiAnalysis = {
-          detectedFruitName: "Bukan Buah",
-          freshnessPercentage: 0,
-          salvageValue: "Rp0 (Error AI)",
-          shelfLife: "0 hari",
-          recipe: "Analisis AI gagal. Periksa API Key atau koneksi internet.",
-        };
+        console.warn("Gemini Error (High Demand):", err.message);
+        const lowerRoboflow = rawClass.toLowerCase();
+        const isUnfreshFromRoboflow =
+          lowerRoboflow.includes("unfresh") ||
+          lowerRoboflow.includes("rotten") ||
+          lowerRoboflow.includes("busuk");
+
+        if (rawClass !== "Buah" && Number(confidenceScore) > 30) {
+          const cleanName =
+            rawClass
+              .replace(/fresh|unfresh|rotten|banana/gi, (m) =>
+                m.toLowerCase() === "banana" ? "Pisang" : "",
+              )
+              .trim() || "Buah";
+          rawClass = cleanName;
+          geminiAnalysis = {
+            detectedFruitName: cleanName,
+            freshnessPercentage: isUnfreshFromRoboflow ? 25 : 80,
+            salvageValue: isUnfreshFromRoboflow ? "Rp5.000" : "Rp15.000",
+            shelfLife: isUnfreshFromRoboflow
+              ? "Hari ini terakhir"
+              : "4 - 5 hari lagi",
+            recipe: isUnfreshFromRoboflow
+              ? "Bolu Kukus Buah: Haluskan buah matang untuk campuran adonan kue\nSmoothie Dingin: Blender dengan susu dan es batu"
+              : "Salad Buah Segar: Potong dadu dan sajikan dingin\nJus Alami: Blender dengan sedikit madu",
+          };
+        } else {
+          showAlert(
+            "Server AI Sedang Sibuk",
+            "Server Gemini sedang mengalami lonjakan trafik (503). Silakan tekan tombol Analisis sekali lagi.",
+          );
+          return;
+        }
       }
 
       // C. SIMPAN KE HISTORY LOKAL (AsyncStorage dengan Base64 permanen)
