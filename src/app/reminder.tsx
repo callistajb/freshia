@@ -82,18 +82,100 @@ const getStorageTipByFruit = (fruitName: string): string => {
 export default function ReminderScreen() {
   const router = useRouter();
   const [reminders, setReminders] = useState<FruitReminder[]>([]);
+  const [isReminderEnabled, setIsReminderEnabled] = useState<boolean>(true);
+  const [brokenImageIds, setBrokenImageIds] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const loadReminders = useCallback(async () => {
+    // 0. Cek preferensi Reminder Buah Hampir Busuk dari halaman Profile (@freshia_reminder_enabled)
+    let enabled = true;
+    try {
+      const savedReminder = await AsyncStorage.getItem(
+        "@freshia_reminder_enabled",
+      );
+      if (savedReminder !== null) {
+        enabled = savedReminder === "true";
+      }
+    } catch (prefErr) {
+      console.warn("Gagal membaca preferensi reminder:", prefErr);
+    }
+
+    setIsReminderEnabled(enabled);
+    if (!enabled) {
+      setReminders([]);
+      return;
+    }
+
     const currentUid = auth.currentUser?.uid;
     let items: FruitReminder[] = [];
+    const cloudImageById: Record<string, string> = {};
 
-    // 1. Baca dari cache lokal AsyncStorage (@freshia_history)
+    // 1. Ambil peta gambar permanen (Base64 / URL) dari Cloud Firestore
+    try {
+      const historyRef = collection(db, "scan_history");
+      const q = currentUid
+        ? query(
+            historyRef,
+            where("user_id", "==", currentUid),
+            orderBy("timestamp", "desc"),
+          )
+        : query(historyRef, orderBy("timestamp", "desc"));
+
+      const snapshot = await getDocs(q);
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.imageUrl) {
+          cloudImageById[docSnap.id] = String(data.imageUrl);
+        }
+      });
+
+      // Simpan daftar dari Firestore sebagai sumber utama jika lokal kosong
+      const cloudItems = snapshot.docs
+        .map((docSnap) => {
+          const data = docSnap.data();
+          const pct = Number(data.analysis?.freshnessPercentage ?? 0);
+          const fruitName = String(data.label || "Buah");
+          const isNotFruit =
+            pct === 0 &&
+            (fruitName.toLowerCase() === "buah" ||
+              fruitName.toLowerCase() === "unknown");
+          if (isNotFruit) return null;
+
+          const scanMs = data.timestamp?.toDate
+            ? data.timestamp.toDate().getTime()
+            : Date.now();
+          const rawShelf = String(data.analysis?.shelfLife || "3 hari");
+          const { label, remainingDays } = calculateDynamicShelfLife(
+            rawShelf,
+            scanMs,
+          );
+
+          return {
+            id: docSnap.id,
+            name: fruitName,
+            daysLeft: label,
+            remainingDaysNum: remainingDays,
+            storageTip: getStorageTipByFruit(fruitName),
+            imageUri: data.imageUrl || undefined,
+            mode: data.mode,
+            analysis: data.analysis,
+          };
+        })
+        .filter(Boolean) as FruitReminder[];
+
+      items = cloudItems;
+    } catch (cloudErr) {
+      console.warn("Sinkronisasi reminder Firestore dilewati:", cloudErr);
+    }
+
+    // 2. Baca dari cache lokal AsyncStorage (@freshia_history)
     try {
       const stored = await AsyncStorage.getItem("@freshia_history");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          items = parsed
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const localItems = parsed
             .filter((entry: any) => {
               if (currentUid && entry.userId && entry.userId !== currentUid) {
                 return false;
@@ -117,75 +199,38 @@ export default function ReminderScreen() {
                 scanTimestamp,
               );
 
+              const cloudUrl = entry.firestoreId
+                ? cloudImageById[entry.firestoreId]
+                : undefined;
+              const resolvedUri =
+                cloudUrl && !cloudUrl.startsWith("blob:")
+                  ? cloudUrl
+                  : entry.image || entry.imageUri || cloudUrl;
+
               return {
                 id: String(entry.id),
                 name: fruitName,
                 daysLeft: label,
                 remainingDaysNum: remainingDays,
                 storageTip: getStorageTipByFruit(fruitName),
-                imageUri: entry.image,
+                imageUri: resolvedUri,
                 mode: entry.mode,
                 analysis: entry.result?.analysis,
               };
             });
+
+          if (localItems.length > 0) {
+            items = localItems;
+          }
         }
       }
     } catch (e) {
       console.warn("Gagal membaca reminder dari lokal:", e);
     }
 
-    // 2. Sinkronisasi dengan Cloud Firestore jika lokal kosong
-    if (items.length === 0) {
-      try {
-        const historyRef = collection(db, "scan_history");
-        const q = currentUid
-          ? query(
-              historyRef,
-              where("user_id", "==", currentUid),
-              orderBy("timestamp", "desc"),
-            )
-          : query(historyRef, orderBy("timestamp", "desc"));
-
-        const snapshot = await getDocs(q);
-        items = snapshot.docs
-          .map((docSnap) => {
-            const data = docSnap.data();
-            const pct = Number(data.analysis?.freshnessPercentage ?? 0);
-            const fruitName = String(data.label || "Buah");
-            const isNotFruit =
-              pct === 0 &&
-              (fruitName.toLowerCase() === "buah" ||
-                fruitName.toLowerCase() === "unknown");
-            if (isNotFruit) return null;
-
-            const scanMs = data.timestamp?.toDate
-              ? data.timestamp.toDate().getTime()
-              : Date.now();
-            const rawShelf = String(data.analysis?.shelfLife || "3 hari");
-            const { label, remainingDays } = calculateDynamicShelfLife(
-              rawShelf,
-              scanMs,
-            );
-
-            return {
-              id: docSnap.id,
-              name: fruitName,
-              daysLeft: label,
-              remainingDaysNum: remainingDays,
-              storageTip: getStorageTipByFruit(fruitName),
-              imageUri: data.imageUrl,
-              mode: data.mode,
-              analysis: data.analysis,
-            };
-          })
-          .filter(Boolean) as FruitReminder[];
-      } catch (cloudErr) {
-        console.warn("Sinkronisasi reminder Firestore dilewati:", cloudErr);
-      }
-    }
-
     // Urutkan dari sisa hari paling sedikit (paling mendesak) di atas
     items.sort((a, b) => a.remainingDaysNum - b.remainingDaysNum);
+    setBrokenImageIds({});
     setReminders(items);
   }, []);
 
@@ -238,11 +283,14 @@ export default function ReminderScreen() {
 
             <View style={styles.summaryTextBox}>
               <Text style={styles.summaryTitle}>
-                {urgentCount > 0 ? urgentCount : reminders.length} buah akan
-                segera busuk
+                {!isReminderEnabled
+                  ? "Reminder Buah Dinonaktifkan"
+                  : `${urgentCount > 0 ? urgentCount : reminders.length} buah akan segera busuk`}
               </Text>
               <Text style={styles.summarySubtitle}>
-                Segera konsumsi agar tidak terbuang!
+                {!isReminderEnabled
+                  ? "Aktifkan kembali di halaman Profil untuk memantau masa simpan"
+                  : "Segera konsumsi agar tidak terbuang!"}
               </Text>
             </View>
 
@@ -257,7 +305,32 @@ export default function ReminderScreen() {
           </View>
 
           {/* Daftar Kartu Buah atau Empty State */}
-          {reminders.length === 0 ? (
+          {!isReminderEnabled ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons
+                  name="notifications-off-outline"
+                  size={34}
+                  color="#9A1B17"
+                />
+              </View>
+              <Text style={styles.emptyTitle}>Notifikasi Reminder Mati</Text>
+              <Text style={styles.emptySubtitle}>
+                Fitur pengingat buah hampir busuk sedang dimatikan di Preferensi
+                Aplikasi. Aktifkan kembali untuk melihat daftar masa simpan buah
+                kamu.
+              </Text>
+              <TouchableOpacity
+                style={styles.scanNowButton}
+                activeOpacity={0.85}
+                onPress={() => router.push("/(tabs)/profile")}
+              >
+                <Text style={styles.scanNowButtonText}>
+                  Buka Pengaturan Profil
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : reminders.length === 0 ? (
             <View style={styles.emptyCard}>
               <View style={styles.emptyIconCircle}>
                 <Ionicons
@@ -286,11 +359,17 @@ export default function ReminderScreen() {
               <View key={item.id} style={styles.fruitCard}>
                 {/* Foto Buah */}
                 <View style={styles.fruitImageWrapper}>
-                  {item.imageUri ? (
+                  {item.imageUri && !brokenImageIds[item.id] ? (
                     <Image
                       source={{ uri: item.imageUri }}
                       style={styles.fruitImage}
                       resizeMode="cover"
+                      onError={() =>
+                        setBrokenImageIds((prev) => ({
+                          ...prev,
+                          [item.id]: true,
+                        }))
+                      }
                     />
                   ) : (
                     <View style={styles.fruitImageFallback}>

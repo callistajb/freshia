@@ -66,6 +66,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [isReminderEnabled, setIsReminderEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -75,6 +76,35 @@ export default function HomeScreen() {
   }, []);
 
   const loadHomeReminders = useCallback(async () => {
+    // 0. Cek preferensi Reminder Buah Hampir Busuk dari halaman Profile
+    let enabled = true;
+    try {
+      const directFlag = await AsyncStorage.getItem(
+        "@freshia_reminder_enabled",
+      );
+      if (directFlag !== null) {
+        enabled = directFlag === "true";
+      } else {
+        const prefRaw = await AsyncStorage.getItem("@freshia_preferences");
+        if (prefRaw) {
+          const parsedPref = JSON.parse(prefRaw);
+          if (typeof parsedPref.reminderEnabled === "boolean") {
+            enabled = parsedPref.reminderEnabled;
+          } else if (typeof parsedPref.isReminderEnabled === "boolean") {
+            enabled = parsedPref.isReminderEnabled;
+          }
+        }
+      }
+    } catch (prefErr) {
+      console.warn("Gagal membaca preferensi reminder:", prefErr);
+    }
+
+    setIsReminderEnabled(enabled);
+    if (!enabled) {
+      setReminders([]);
+      return;
+    }
+
     const currentUid = auth.currentUser?.uid;
     let items: ReminderItem[] = [];
 
@@ -256,25 +286,27 @@ export default function HomeScreen() {
 
           <Text style={styles.welcomeHeading}>Welcome to Freshia</Text>
 
-          {/* Banner 1: Peringatan Tanggal Busuk */}
-          <TouchableOpacity
-            style={styles.alertBanner}
-            activeOpacity={0.85}
-            onPress={() => router.push("/reminder")}
-          >
-            <View style={styles.alertBellCircle}>
-              <Ionicons name="notifications" size={24} color="#9A1B17" />
-            </View>
-            <View style={styles.alertTextBox}>
-              <Text style={styles.alertTitle}>
-                Ada Buah yang{"\n"}mendekati tanggal busuk !
-              </Text>
-              <Text style={styles.alertSubtitle}>
-                Cek sekarang agar tidak terbuang
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={22} color="#1C1C1E" />
-          </TouchableOpacity>
+          {/* Banner 1: Peringatan Tanggal Busuk (hanya tampil jika Reminder aktif) */}
+          {isReminderEnabled && (
+            <TouchableOpacity
+              style={styles.alertBanner}
+              activeOpacity={0.85}
+              onPress={() => router.push("/reminder")}
+            >
+              <View style={styles.alertBellCircle}>
+                <Ionicons name="notifications" size={24} color="#9A1B17" />
+              </View>
+              <View style={styles.alertTextBox}>
+                <Text style={styles.alertTitle}>
+                  Ada Buah yang{"\n"}mendekati tanggal busuk !
+                </Text>
+                <Text style={styles.alertSubtitle}>
+                  Cek sekarang agar tidak terbuang
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#1C1C1E" />
+            </TouchableOpacity>
+          )}
 
           {/* Kartu 2: Reminder Buah */}
           <View style={styles.reminderCard}>
@@ -282,7 +314,9 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.reminderTitle}>Reminder Buah</Text>
                 <Text style={styles.reminderSubtitle}>
-                  Buah yang hampir busuk
+                  {isReminderEnabled
+                    ? "Buah yang hampir busuk"
+                    : "Notifikasi reminder dinonaktifkan"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -290,12 +324,30 @@ export default function HomeScreen() {
                 activeOpacity={0.8}
                 onPress={() => router.push("/reminder")}
               >
-                <Ionicons name="notifications" size={18} color="#9A1B17" />
+                <Ionicons
+                  name={
+                    isReminderEnabled
+                      ? "notifications"
+                      : "notifications-off-outline"
+                  }
+                  size={18}
+                  color="#9A1B17"
+                />
               </TouchableOpacity>
             </View>
 
-            {/* Kotak Putih Kosong jika belum ada buah hampir busuk */}
-            {reminders.length === 0 ? (
+            {/* Kotak Putih Kosong jika reminder nonaktif atau belum ada buah hampir busuk */}
+            {!isReminderEnabled ? (
+              <TouchableOpacity
+                style={styles.emptyReminderBox}
+                activeOpacity={0.8}
+                onPress={() => router.push("/(tabs)/profile")}
+              >
+                <Text style={styles.emptyReminderText}>
+                  Reminder dimatikan. Ketuk untuk mengaktifkan di Profil
+                </Text>
+              </TouchableOpacity>
+            ) : reminders.length === 0 ? (
               <View style={styles.emptyReminderBox}>
                 <Text style={styles.emptyReminderText}>
                   Belum ada buah yang mendekati tanggal busuk

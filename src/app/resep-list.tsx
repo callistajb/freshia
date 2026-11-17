@@ -4,15 +4,15 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { auth } from "../firebaseConfig";
 
@@ -30,10 +30,151 @@ export interface RecipeDetailItem {
 }
 
 const GEMINI_MODELS: string[] = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
   "gemini-2.5-flash",
 ].filter((name, index, list) => list.indexOf(name) === index);
+
+// Resep cadangan otomatis jika server Gemini sedang 503 (sibuk) / limit
+const buildFallbackRecipes = (
+  fruitName: string,
+  kategori: "makanan" | "minuman",
+  imageUri?: string,
+): RecipeDetailItem[] => {
+  const now = Date.now();
+  if (kategori === "minuman") {
+    return [
+      {
+        id: `fallback-minuman-${fruitName}-1-${now}`,
+        title: `Smoothie Segar ${fruitName}`,
+        subtitle: `Minuman kental bernutrisi tinggi untuk mengolah ${fruitName} matang agar tidak terbuang.`,
+        fruitName,
+        prepTime: "10 Menit",
+        difficulty: "Mudah",
+        calories: "165 kkal",
+        ingredients: [
+          `200 gr daging buah ${fruitName}, potong kecil`,
+          "150 ml susu cair rendah lemak atau yogurt tawar",
+          "1 sdm madu murni",
+          "Es batu secukupnya",
+        ],
+        steps: [
+          `Kupas dan bersihkan buah ${fruitName}, lalu potong dadu agar mudah diblender.`,
+          "Masukkan potongan buah, susu cair, madu, dan es batu ke dalam blender.",
+          "Haluskan selama 45 detik hingga tekstur lembut dan creamy, lalu sajikan segera.",
+        ],
+        imageUri,
+      },
+      {
+        id: `fallback-minuman-${fruitName}-2-${now}`,
+        title: `Es Jus ${fruitName} Madu Jeruk Nipis`,
+        subtitle: `Perpaduan segar ${fruitName} dengan perasan jeruk nipis yang kaya antioksidan.`,
+        fruitName,
+        prepTime: "10 Menit",
+        difficulty: "Mudah",
+        calories: "120 kkal",
+        ingredients: [
+          `250 gr daging buah ${fruitName}`,
+          "200 ml air matang dingin",
+          "1 sdm perasan jeruk nipis",
+          "1-2 sdm madu atau gula aren cair",
+        ],
+        steps: [
+          `Haluskan daging buah ${fruitName} bersama air matang menggunakan blender.`,
+          "Saring bila ingin tekstur lebih jernih, lalu tambahkan madu dan perasan jeruk nipis.",
+          "Aduk rata dan sajikan dingin dengan tambahan es batu.",
+        ],
+        imageUri,
+      },
+      {
+        id: `fallback-minuman-${fruitName}-3-${now}`,
+        title: `Infused Water ${fruitName} Mint`,
+        subtitle: `Minuman detoks ringan tanpa pemanis tambahan untuk kesegaran harian.`,
+        fruitName,
+        prepTime: "5 Menit",
+        difficulty: "Mudah",
+        calories: "25 kkal",
+        ingredients: [
+          `100 gr irisan tipis buah ${fruitName}`,
+          "500 ml air mineral dingin",
+          "5 lembar daun mint segar",
+        ],
+        steps: [
+          `Iris tipis buah ${fruitName} dan masukkan ke dalam botol atau pitcher kaca.`,
+          "Tambahkan daun mint dan tuang air mineral dingin.",
+          "Simpan di kulkas minimal 1 jam sebelum diminum agar sari buah meresap.",
+        ],
+        imageUri,
+      },
+    ];
+  }
+
+  return [
+    {
+      id: `fallback-makanan-${fruitName}-1-${now}`,
+      title: `Selai Homemade ${fruitName}`,
+      subtitle: `Olesan roti alami tanpa pengawet untuk memperpanjang masa simpan ${fruitName}.`,
+      fruitName,
+      prepTime: "25 Menit",
+      difficulty: "Mudah",
+      calories: "140 kkal",
+      ingredients: [
+        `300 gr daging buah ${fruitName}, cincang halus`,
+        "3 sdm gula pasir atau gula aren",
+        "1 sdm air perasan lemon atau jeruk nipis",
+        "50 ml air",
+      ],
+      steps: [
+        `Masak potongan ${fruitName}, gula, dan air di atas api kecil sambil diaduk perlahan.`,
+        "Lumatkan daging buah saat mulai melunak hingga mengental.",
+        "Tambahkan air perasan lemon, aduk 2 menit lalu simpan dalam stoples kaca bersih.",
+      ],
+      imageUri,
+    },
+    {
+      id: `fallback-makanan-${fruitName}-2-${now}`,
+      title: `Overnight Oats & Topping ${fruitName}`,
+      subtitle: `Menu sarapan praktis kaya serat dengan potongan segar ${fruitName}.`,
+      fruitName,
+      prepTime: "10 Menit",
+      difficulty: "Mudah",
+      calories: "240 kkal",
+      ingredients: [
+        `150 gr daging buah ${fruitName}, potong dadu`,
+        "5 sdm rolled oats",
+        "150 ml susu cair atau susu nabati",
+        "1 sdt chia seed dan 1 sdm madu",
+      ],
+      steps: [
+        "Campurkan oats, susu cair, chia seed, dan madu di dalam wadah tertutup.",
+        `Tambahkan setengah bagian potongan ${fruitName}, aduk rata dan simpan di kulkas semalaman.`,
+        `Sajikan keesokan paginya dengan sisa potongan ${fruitName} di atasnya.`,
+      ],
+      imageUri,
+    },
+    {
+      id: `fallback-makanan-${fruitName}-3-${now}`,
+      title: `Salad Buah ${fruitName} Saus Yogurt`,
+      subtitle: `Camilan sehat segar dengan dressing yogurt madu yang ringan.`,
+      fruitName,
+      prepTime: "15 Menit",
+      difficulty: "Mudah",
+      calories: "175 kkal",
+      ingredients: [
+        `250 gr daging buah ${fruitName}, potong sesuai selera`,
+        "100 gr yogurt plain kental",
+        "1 sdm madu",
+        "Keju parut secukupnya untuk taburan",
+      ],
+      steps: [
+        `Tata potongan buah ${fruitName} dingin di dalam mangkuk saji.`,
+        "Aduk rata yogurt plain bersama madu hingga menjadi saus lembut.",
+        "Siram saus di atas buah dan beri taburan keju parut sebelum disajikan.",
+      ],
+      imageUri,
+    },
+  ];
+};
 
 export default function ResepListScreen() {
   const router = useRouter();
@@ -56,6 +197,7 @@ export default function ResepListScreen() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
 
   // 1. Ambil HANYA buah yang beneran pernah di-scan user dari AsyncStorage
   const loadScannedFruits = useCallback(async () => {
@@ -133,7 +275,7 @@ export default function ResepListScreen() {
     }, [loadScannedFruits]),
   );
 
-  // 2. Generate resep murni lewat Gemini AI berdasarkan buah hasil foto user
+  // 2. Generate resep lewat Gemini AI dengan fallback otomatis jika server sibuk (503)
   const generateRecipesWithGemini = useCallback(
     async (fruitTarget: string) => {
       if (!fruitTarget) {
@@ -141,9 +283,16 @@ export default function ResepListScreen() {
         return;
       }
 
+      const matchedStock = scannedFruits.find(
+        (f) => f.name.toLowerCase() === fruitTarget.toLowerCase(),
+      );
+
       const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
       if (!GEMINI_API_KEY) {
-        setAiError("GEMINI_API_KEY belum diatur di file .env");
+        setRecipes(
+          buildFallbackRecipes(fruitTarget, kategori, matchedStock?.imageUri),
+        );
+        setAiError(null);
         return;
       }
 
@@ -154,10 +303,6 @@ export default function ResepListScreen() {
         kategori === "makanan"
           ? "Olahan Makanan (camilan, kue, sarapan, atau hidangan penutup)"
           : "Olahan Minuman (jus, smoothie, infused water, atau mocktail sehat)";
-
-      const matchedStock = scannedFruits.find(
-        (f) => f.name.toLowerCase() === fruitTarget.toLowerCase(),
-      );
 
       const freshnessContext = matchedStock?.freshness
         ? `Tingkat kesegaran buah saat di-scan adalah ${matchedStock.freshness}%. Sesuaikan teknik pengolahannya dengan kondisi kesegaran tersebut.`
@@ -179,7 +324,6 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
 ]`;
 
       let success = false;
-      let lastErrMsg = "Gagal memuat resep dari AI.";
 
       for (const model of GEMINI_MODELS) {
         try {
@@ -203,8 +347,10 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
 
           const data = await response.json();
           if (!response.ok) {
-            lastErrMsg =
-              data?.error?.message || `Error ${response.status} pada ${model}`;
+            console.warn(
+              `Gemini (${model}) gagal [${response.status}]:`,
+              data?.error?.message,
+            );
             continue;
           }
 
@@ -251,13 +397,16 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
             }
           }
         } catch (err: any) {
-          lastErrMsg = err?.message || "Kesalahan jaringan saat memanggil AI";
+          console.warn(`Kesalahan jaringan pada ${model}:`, err?.message);
         }
       }
 
       if (!success) {
-        setRecipes([]);
-        setAiError(lastErrMsg);
+        // Gunakan resep cadangan otomatis agar user tetap mendapat ide olahan meski server AI 503
+        setRecipes(
+          buildFallbackRecipes(fruitTarget, kategori, matchedStock?.imageUri),
+        );
+        setAiError(null);
       }
       setIsLoadingAI(false);
     },
@@ -457,11 +606,17 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
                     onPress={() => openRecipeDetail(item)}
                   >
                     <View style={styles.recipeThumbBox}>
-                      {item.imageUri ? (
+                      {item.imageUri && !brokenThumbs[item.id] ? (
                         <Image
                           source={{ uri: item.imageUri }}
                           style={styles.recipeThumbImage}
                           resizeMode="cover"
+                          onError={() =>
+                            setBrokenThumbs((prev) => ({
+                              ...prev,
+                              [item.id]: true,
+                            }))
+                          }
                         />
                       ) : (
                         <Image

@@ -1,8 +1,18 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { deleteUser, onAuthStateChanged, signOut, User } from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,18 +21,33 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../../firebaseConfig";
+import { auth, db } from "../../firebaseConfig";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  // Statistik nyata pengguna
+  const [totalScans, setTotalScans] = useState(0);
+  const [savedFruits, setSavedFruits] = useState(0);
+  const [savedValueLabel, setSavedValueLabel] = useState("Rp 0");
+
+  // Preferensi aplikasi
+  const [defaultMode, setDefaultMode] = useState<"Pribadi" | "Bisnis">(
+    "Pribadi",
+  );
+  const [reminderEnabled, setReminderEnabled] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -32,10 +57,144 @@ export default function ProfileScreen() {
     return unsubscribe;
   }, []);
 
+  const loadProfileData = useCallback(async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      await currentUser.reload().catch(() => {});
+      setUser(auth.currentUser);
+    }
+
+    const currentUid = auth.currentUser?.uid;
+
+    // Muat foto profil kustom (Base64 dari cache lokal / Firestore)
+    if (currentUid) {
+      try {
+        const cachedAvatar = await AsyncStorage.getItem(
+          `@freshia_avatar_${currentUid}`,
+        );
+        if (cachedAvatar) {
+          setCustomPhoto(cachedAvatar);
+          setImgError(false);
+        }
+
+        const userSnap = await getDoc(doc(db, "users", currentUid));
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          if (userData.photoBase64) {
+            const base64Str = String(userData.photoBase64);
+            setCustomPhoto(base64Str);
+            setImgError(false);
+            await AsyncStorage.setItem(
+              `@freshia_avatar_${currentUid}`,
+              base64Str,
+            );
+          }
+        }
+      } catch {}
+    }
+
+    // Muat preferensi tersimpan
+    try {
+      const savedMode = await AsyncStorage.getItem("@freshia_default_mode");
+      if (savedMode === "Bisnis" || savedMode === "Pribadi") {
+        setDefaultMode(savedMode);
+      }
+      const savedReminder = await AsyncStorage.getItem(
+        "@freshia_reminder_enabled",
+      );
+      if (savedReminder !== null) {
+        setReminderEnabled(savedReminder === "true");
+      }
+    } catch {}
+
+    // Hitung statistik dampak dari riwayat scan user
+    let entries: { pct: number; salvage: string }[] = [];
+
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          entries = parsed
+            .filter(
+              (item: any) =>
+                !currentUid || !item.userId || item.userId === currentUid,
+            )
+            .map((item: any) => ({
+              pct: Number(item.result?.analysis?.freshnessPercentage ?? 0),
+              salvage: String(item.result?.analysis?.salvageValue || ""),
+            }));
+        }
+      }
+    } catch {}
+
+    if (entries.length === 0 && currentUid) {
+      try {
+        const q = query(
+          collection(db, "scan_history"),
+          where("user_id", "==", currentUid),
+        );
+        const snap = await getDocs(q);
+        entries = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            pct: Number(data.analysis?.freshnessPercentage ?? 0),
+            salvage: String(data.analysis?.salvageValue || ""),
+          };
+        });
+      } catch {}
+    }
+
+    setTotalScans(entries.length);
+    const rescued = entries.filter((e) => e.pct >= 40);
+    setSavedFruits(rescued.length);
+
+    // Akumulasi estimasi rupiah dari salvageValue (misal "Rp 15.000/kg" -> 15000)
+    let totalRupiah = 0;
+    rescued.forEach((e) => {
+      const match = e.salvage.replace(/\./g, "").match(/(\d+)/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (val >= 1000 && val <= 10000000) {
+          totalRupiah += val;
+        }
+      }
+    });
+
+    if (totalRupiah >= 1000000) {
+      setSavedValueLabel(`Rp ${(totalRupiah / 1000000).toFixed(1)} Jt`);
+    } else if (totalRupiah >= 1000) {
+      setSavedValueLabel(`Rp ${Math.round(totalRupiah / 1000)} Rb`);
+    } else {
+      setSavedValueLabel(`Rp ${totalRupiah}`);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileData();
+    }, [loadProfileData]),
+  );
+
+  const toggleDefaultMode = async () => {
+    const nextMode = defaultMode === "Pribadi" ? "Bisnis" : "Pribadi";
+    setDefaultMode(nextMode);
+    await AsyncStorage.setItem("@freshia_default_mode", nextMode);
+  };
+
+  const toggleReminder = async (value: boolean) => {
+    setReminderEnabled(value);
+    await AsyncStorage.setItem("@freshia_reminder_enabled", String(value));
+  };
+
   const displayName =
     user?.displayName ||
     (user?.email ? user.email.split("@")[0] : "Pengguna Freshia");
   const displayEmail = user?.email || "user@freshia.com";
+  const activeAvatarUri = customPhoto || user?.photoURL || null;
+  const isGoogleProvider = user?.providerData?.some(
+    (p) => p.providerId === "google.com",
+  );
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
@@ -55,17 +214,55 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleInformationPersonal = () => {
-    const info = `Nama: ${displayName}\nEmail: ${displayEmail}`;
-    if (Platform.OS === "web") {
-      window.alert(`Information Personal\n\n${info}`);
-    } else {
-      Alert.alert("Information Personal", info);
+  const handleConfirmDeleteAccount = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    setDeletingAccount(true);
+    try {
+      // Hapus dokumen scan_history milik user di Firestore
+      const q = query(
+        collection(db, "scan_history"),
+        where("user_id", "==", currentUser.uid),
+      );
+      const snap = await getDocs(q);
+      await Promise.allSettled(
+        snap.docs.map((d) => deleteDoc(doc(db, "scan_history", d.id))),
+      );
+
+      // Hapus dokumen profil user di Firestore
+      await deleteDoc(doc(db, "users", currentUser.uid)).catch(() => {});
+
+      // Hapus cache lokal
+      await AsyncStorage.removeItem("@freshia_history");
+      await AsyncStorage.removeItem(`@freshia_avatar_${currentUser.uid}`);
+
+      // Hapus akun Firebase Auth
+      await deleteUser(currentUser);
+      setDeleteModalVisible(false);
+      router.replace("/welcome");
+    } catch (error: any) {
+      setDeleteModalVisible(false);
+      const msg =
+        error?.code === "auth/requires-recent-login"
+          ? "Demi keamanan, silakan keluar lalu masuk kembali sebelum menghapus akun."
+          : error?.message || "Gagal menghapus akun.";
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert("Konfirmasi Keamanan", msg);
+      }
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
+  const handleInformationPersonal = () => {
+    router.push("/edit-profile");
+  };
+
   const handleChangePassword = () => {
-    router.push("/forgot-password");
+    router.push("/change-password");
   };
 
   return (
@@ -93,36 +290,57 @@ export default function ProfileScreen() {
 
         {/* Foto Profil & Identitas User */}
         <View style={styles.profileInfo}>
-          <View style={styles.avatarWrapper}>
-            {user?.photoURL && !imgError ? (
-              Platform.OS === "web" ? (
-                <img
-                  src={user.photoURL}
-                  alt="Profile"
-                  referrerPolicy="no-referrer"
-                  onError={() => setImgError(true)}
-                  style={{
-                    width: 104,
-                    height: 104,
-                    borderRadius: 52,
-                    objectFit: "cover",
-                  }}
-                />
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            activeOpacity={0.85}
+            onPress={handleInformationPersonal}
+          >
+            <View style={styles.avatarWrapper}>
+              {activeAvatarUri && !imgError ? (
+                Platform.OS === "web" ? (
+                  <img
+                    src={activeAvatarUri}
+                    alt="Profile"
+                    referrerPolicy="no-referrer"
+                    onError={() => setImgError(true)}
+                    style={{
+                      width: 104,
+                      height: 104,
+                      borderRadius: 52,
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: activeAvatarUri }}
+                    style={styles.avatar}
+                    onError={() => setImgError(true)}
+                  />
+                )
               ) : (
-                <Image
-                  source={{ uri: user.photoURL }}
-                  style={styles.avatar}
-                  onError={() => setImgError(true)}
-                />
-              )
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Ionicons name="person" size={54} color="#9A1B17" />
-              </View>
-            )}
-          </View>
+                <View style={styles.avatarFallback}>
+                  <Ionicons name="person" size={54} color="#9A1B17" />
+                </View>
+              )}
+            </View>
+            <View style={styles.editAvatarBadge}>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+
           <Text style={styles.userName}>{displayName}</Text>
           <Text style={styles.userEmail}>{displayEmail}</Text>
+
+          <View style={styles.providerBadge}>
+            <Ionicons
+              name={isGoogleProvider ? "logo-google" : "mail-outline"}
+              size={12}
+              color="#FFFFFF"
+            />
+            <Text style={styles.providerBadgeText}>
+              {isGoogleProvider ? "Akun Google Terhubung" : "Akun Email"}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -132,6 +350,24 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Ringkasan Dampak Freshia */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{totalScans}</Text>
+              <Text style={styles.statLabel}>Total Scan</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{savedFruits}</Text>
+              <Text style={styles.statLabel}>Terselamatkan</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{savedValueLabel}</Text>
+              <Text style={styles.statLabel}>Estimasi Nilai</Text>
+            </View>
+          </View>
+
           <Text style={styles.sectionTitle}>Account Overview</Text>
 
           {/* Menu 1: Information Personal */}
@@ -147,7 +383,13 @@ export default function ProfileScreen() {
                 color="#9A1B17"
               />
             </View>
-            <Text style={styles.menuText}>Information Personal</Text>
+            <View style={styles.menuTextGroup}>
+              <Text style={styles.menuText}>Information Personal</Text>
+              <Text style={styles.menuSubText}>
+                Ubah nama tampilan & foto profil
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9A1B17" />
           </TouchableOpacity>
 
           {/* Menu 2: Change Password */}
@@ -163,8 +405,98 @@ export default function ProfileScreen() {
                 color="#9A1B17"
               />
             </View>
-            <Text style={styles.menuText}>Change Password</Text>
+            <View style={styles.menuTextGroup}>
+              <Text style={styles.menuText}>Change Password</Text>
+              <Text style={styles.menuSubText}>
+                {isGoogleProvider
+                  ? "Dikelola melalui keamanan Google"
+                  : "Perbarui kata sandi akun"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9A1B17" />
           </TouchableOpacity>
+
+          {/* Bagian Preferensi Aplikasi */}
+          <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
+            Preferensi Aplikasi
+          </Text>
+
+          {/* Default Scan Mode */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.75}
+            onPress={toggleDefaultMode}
+          >
+            <View style={styles.menuIconCircle}>
+              <Ionicons
+                name={
+                  defaultMode === "Bisnis"
+                    ? "briefcase-outline"
+                    : "home-outline"
+                }
+                size={24}
+                color="#9A1B17"
+              />
+            </View>
+            <View style={styles.menuTextGroup}>
+              <Text style={styles.menuText}>Mode Scan Default</Text>
+              <Text style={styles.menuSubText}>
+                Saat ini: Mode {defaultMode} (ketuk untuk ganti)
+              </Text>
+            </View>
+            <View style={styles.modePill}>
+              <Text style={styles.modePillText}>{defaultMode}</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Notifikasi Pengingat Buah */}
+          <View style={styles.menuItem}>
+            <View style={styles.menuIconCircle}>
+              <Ionicons
+                name="notifications-outline"
+                size={24}
+                color="#9A1B17"
+              />
+            </View>
+            <View style={styles.menuTextGroup}>
+              <Text style={styles.menuText}>Reminder Buah Hampir Busuk</Text>
+              <Text style={styles.menuSubText}>
+                Tampilkan peringatan masa simpan buah
+              </Text>
+            </View>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={toggleReminder}
+              trackColor={{ false: "#E0D6D6", true: "#F4A4A1" }}
+              thumbColor={reminderEnabled ? "#C8201B" : "#F4F3F4"}
+            />
+          </View>
+
+          {/* Zona Keamanan & Hapus Akun */}
+          <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
+            Keamanan & Data
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.menuItem, styles.dangerMenuItem]}
+            activeOpacity={0.75}
+            onPress={() => setDeleteModalVisible(true)}
+          >
+            <View style={styles.menuIconCircle}>
+              <Ionicons name="trash-outline" size={24} color="#C8201B" />
+            </View>
+            <View style={styles.menuTextGroup}>
+              <Text style={[styles.menuText, { color: "#C8201B" }]}>
+                Hapus Akun Permanen
+              </Text>
+              <Text style={styles.menuSubText}>
+                Hapus akun beserta seluruh riwayat scan
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#C8201B" />
+          </TouchableOpacity>
+
+          <Text style={styles.versionText}>Freshia Production v1.0.0</Text>
         </ScrollView>
       </View>
 
@@ -181,7 +513,6 @@ export default function ProfileScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            {/* Tombol Silang (X) Pojok Kanan Atas */}
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setLogoutModalVisible(false)}
@@ -197,7 +528,6 @@ export default function ProfileScreen() {
             </Text>
 
             <View style={styles.modalButtonRow}>
-              {/* Tombol Ya */}
               <TouchableOpacity
                 style={[styles.yesButton, loggingOut && { opacity: 0.7 }]}
                 onPress={handleConfirmLogout}
@@ -211,7 +541,6 @@ export default function ProfileScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* Tombol Kembali */}
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setLogoutModalVisible(false)}
@@ -219,6 +548,61 @@ export default function ProfileScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.cancelButtonText}>Kembali</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pop-up Modal Konfirmasi Hapus Akun Permanen */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deletingAccount) {
+            setDeleteModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setDeleteModalVisible(false)}
+              disabled={deletingAccount}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={22} color="#333333" />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>Hapus Akun</Text>
+            <Text style={styles.modalSubtitle}>
+              Semua data profil dan riwayat pemindaian buah akan dihapus
+              permanen dan tidak dapat dipulihkan.
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.yesButton, deletingAccount && { opacity: 0.7 }]}
+                onPress={handleConfirmDeleteAccount}
+                disabled={deletingAccount}
+                activeOpacity={0.85}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.yesButtonText}>Hapus</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setDeleteModalVisible(false)}
+                disabled={deletingAccount}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.cancelButtonText}>Batal</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -236,14 +620,14 @@ const styles = StyleSheet.create({
   headerSection: {
     backgroundColor: "#C8201B",
     paddingTop: Platform.OS === "ios" ? 56 : 42,
-    paddingBottom: 28,
+    paddingBottom: 26,
     paddingHorizontal: 24,
   },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   logo: {
     width: 105,
@@ -255,6 +639,10 @@ const styles = StyleSheet.create({
   profileInfo: {
     alignItems: "center",
   },
+  avatarContainer: {
+    position: "relative",
+    marginBottom: 12,
+  },
   avatarWrapper: {
     width: 104,
     height: 104,
@@ -263,7 +651,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 14,
   },
   avatar: {
     width: 104,
@@ -277,32 +664,92 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  editAvatarBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#8E1612",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   userName: {
     fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   userEmail: {
     fontSize: 13,
     color: "#F8E5E5",
+    marginBottom: 8,
+  },
+  providerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  providerBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   contentCard: {
     flex: 1,
     backgroundColor: "#FFFBFB",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingTop: 26,
+    paddingTop: 22,
     paddingHorizontal: 24,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
+
+  /* Kartu Statistik Dampak */
+  statsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FCE8E8",
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#9A1B17",
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#7A2825",
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#E8BCBA",
+  },
+
   sectionTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: "#9A1B17",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   menuItem: {
     flexDirection: "row",
@@ -312,23 +759,53 @@ const styles = StyleSheet.create({
     borderColor: "#9A1B17",
     borderRadius: 28,
     paddingVertical: 12,
-    paddingHorizontal: 18,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  dangerMenuItem: {
+    borderColor: "#E5A5A3",
+    backgroundColor: "#FFF8F8",
   },
   menuIconCircle: {
     width: 34,
     height: 34,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
+    marginRight: 12,
+  },
+  menuTextGroup: {
+    flex: 1,
+    paddingRight: 8,
   },
   menuText: {
-    fontSize: 15,
-    fontWeight: "500",
+    fontSize: 14.5,
+    fontWeight: "600",
     color: "#9A1B17",
   },
+  menuSubText: {
+    fontSize: 11.5,
+    color: "#7A6A6A",
+    marginTop: 1,
+  },
+  modePill: {
+    backgroundColor: "#FCE8E8",
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  modePillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#9A1B17",
+  },
+  versionText: {
+    textAlign: "center",
+    fontSize: 11.5,
+    color: "#A89898",
+    marginTop: 8,
+  },
 
-  /* Modal Logout Styles */
+  /* Modal Logout & Delete Styles */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.55)",
@@ -369,6 +846,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#222222",
     textAlign: "center",
+    lineHeight: 19,
     marginBottom: 24,
   },
   modalButtonRow: {

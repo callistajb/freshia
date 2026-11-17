@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -21,3 +22,6 @@ export const db = getFirestore(app);
 
 // Authentication (menggunakan getAuth standar yang aman untuk Expo)
 export const auth = getAuth(app);
+
+// Cloud Storage (untuk menyimpan foto profil pengguna)
+export const storage = getStorage(app);

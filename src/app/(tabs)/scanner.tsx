@@ -2,9 +2,9 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as SystemUI from "expo-system-ui";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -25,10 +25,43 @@ import { auth, db } from "../../firebaseConfig";
 
 // --- PENGATURAN MODEL GEMINI ---
 const GEMINI_MODELS: string[] = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-2.5-flash",
-  "gemini-2.0-flash",
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
+  "gemini-2.5-flash",
 ].filter((name, index, list) => list.indexOf(name) === index);
+
+// Kompres gambar ke Base64 kecil agar permanen disimpan di AsyncStorage & Firestore (maks 1MB/dokumen)
+const createPersistentThumbnail = async (
+  uri: string,
+  rawBase64: string,
+): Promise<string> => {
+  const fallbackDataUrl = `data:image/jpeg;base64,${rawBase64}`;
+
+  if (Platform.OS === "web" && typeof document !== "undefined") {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 320;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.55));
+        } else {
+          resolve(fallbackDataUrl);
+        }
+      };
+      img.onerror = () => resolve(fallbackDataUrl);
+      img.src = uri.startsWith("data:") ? uri : fallbackDataUrl;
+    });
+  }
+
+  return fallbackDataUrl;
+};
 
 const uploadToCloudinary = async (base64String: string) => {
   const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -163,6 +196,9 @@ export default function ScannerScreen() {
   } | null>(null);
 
   // State Mode & Input sesuai Figma (Bisnis / Pribadi)
+  const [defaultModePref, setDefaultModePref] = useState<
+    "Bisnis" | "Pribadi" | null
+  >(null);
   const [selectedMode, setSelectedMode] = useState<"Bisnis" | "Pribadi" | null>(
     null,
   );
@@ -173,6 +209,26 @@ export default function ScannerScreen() {
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Sinkronisasi Mode Scan Default dari halaman Profile (@freshia_default_mode)
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const savedMode = await AsyncStorage.getItem("@freshia_default_mode");
+          if (!active) return;
+          if (savedMode === "Bisnis" || savedMode === "Pribadi") {
+            setDefaultModePref(savedMode);
+            setSelectedMode(savedMode);
+          }
+        } catch {}
+      })();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const showAlert = (title: string, message: string) => {
     if (Platform.OS === "web") {
@@ -206,8 +262,13 @@ export default function ScannerScreen() {
         ? photo.base64.split(",")[1]
         : photo.base64;
 
+      const persistentUri = await createPersistentThumbnail(
+        photo.uri,
+        rawBase64,
+      );
+
       setCapturedPhoto({
-        uri: photo.uri,
+        uri: persistentUri,
         base64: rawBase64,
       });
     } catch (err: any) {
@@ -240,8 +301,13 @@ export default function ScannerScreen() {
             ? asset.base64.split(",")[1]
             : asset.base64;
 
+          const persistentUri = await createPersistentThumbnail(
+            asset.uri,
+            rawBase64,
+          );
+
           setCapturedPhoto({
-            uri: asset.uri,
+            uri: persistentUri,
             base64: rawBase64,
           });
         }
@@ -255,7 +321,7 @@ export default function ScannerScreen() {
   // Reset foto ("Ulangi Gambar")
   const handleRetake = () => {
     setCapturedPhoto(null);
-    setSelectedMode(null);
+    setSelectedMode(defaultModePref);
     setPanjang("");
     setLebar("");
     setTinggi("");
@@ -363,7 +429,7 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
       } catch (err: any) {
         lastError = err;
         console.log(`Gemini (${model}) gagal: ${err.message}`);
-        if (![404, 429, 500, 503].includes(err.status)) break;
+        if (![400, 404, 429, 500, 503].includes(err.status)) break;
       }
     }
     throw lastError;
@@ -441,7 +507,7 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
         };
       }
 
-      // C. SIMPAN KE HISTORY LOKAL (AsyncStorage)
+      // C. SIMPAN KE HISTORY LOKAL (AsyncStorage dengan Base64 permanen)
       const entryId = await saveToHistory(capturedPhoto.uri, {
         label: rawClass,
         confidence: confidenceScore,
@@ -459,7 +525,7 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
         },
       });
 
-      // E. UPLOAD CLOUDINARY & SIMPAN PERMANEN KE FIRESTORE (Fire-and-forget)
+      // E. UPLOAD CLOUDINARY (OPSIONAL) & SIMPAN PERMANEN KE FIRESTORE (Base64 fallback)
       const currentUserId = auth.currentUser?.uid || null;
       const metadataInput =
         selectedMode === "Bisnis" ? { panjang, lebar, tinggi } : { berat };
@@ -471,7 +537,7 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
             finalImageUrl = await uploadToCloudinary(rawBase64);
           } catch (cloudErr) {
             console.warn(
-              "Cloudinary dilewati (cek .env), lanjut simpan metadata ke Firestore:",
+              "Cloudinary dilewati (cek .env), lanjut simpan Base64 ke Firestore:",
               cloudErr,
             );
           }
