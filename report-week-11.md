@@ -24,7 +24,10 @@ Pencapaian utama pada milestone ini mencakup:
 4. **Hybrid AI Detection & Reasoning Engine (FR-04 & FR-05):** Pipeline terpadu yang memadukan deteksi awal Roboflow Computer Vision dengan penalaran multimodal Google Gemini Vision API (mendukung fallback adaptif model terbaru Google Gemini), menghasilkan data terstruktur tingkat kesegaran, estimasi nilai sisa/keuntungan (Rp), masa simpan, dan resep *zero-waste*.
 5. **Visualisasi Grafik Kesegaran & Alur Resep Zero-Waste (FR-06):** Render antarmuka visual grafik donat kesegaran dengan palet warna dinamis status mutu buah, kartu estimasi bisnis (harga jual & proyeksi laba olahan), serta modul halaman resep interaktif lengkap (`resep-list.tsx`, `resep-detail.tsx`, dan tab `resep.tsx`).
 6. **Sinkronisasi Data Multi-Tier & Pengingat Masa Simpan (FR-07):** Pencatatan riwayat pemindaian berbasis lokal (*AsyncStorage* dengan URI gambar lokal) untuk akses instan tanpa latensi, modul penjadwalan pengingat masa simpan buah (`reminder.tsx`), serta sinkronisasi latar belakang (*background sync*) ke basis data Google Cloud Firestore dan Cloudinary CDN.
-7. **Pengujian & CI/CD (B11.2 & B11.4):** Pengujian unit otomatis dengan 14 skenario uji (tingkat kelulusan 100%, cakupan baris 98.68%), konfigurasi pipeline otomatisasi GitHub Actions (`ci.yml`), serta panduan kompilasi rilis di [DEPLOYMENT.md](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md).
+7. **Profil Pengguna & Preferensi (FR-08):** Halaman profil user yang diperkaya dengan fitur edit profil (edit-profile.tsx), ganti password (change-password.tsx), upload foto profil via galeri/kamera, toggle default mode scan (Bisnis/Pribadi), hapus akun, serta arsitektur penyimpanan profil 5-collection Firestore (users, scan_history, saved_recipes, eminders, pp_feedback).
+8. **Input Kuantitas Mode Pribadi (FR-02 Enhancement):** Penambahan toggle input "Jumlah Buah" vs "Berat" pada Mode Pribadi dengan preset chip cepat (1, 2, 3, 5, 10 buah dan 100g, 250g, 500g, 1kg, 2kg) agar lebih intuitif bagi pengguna rumah tangga.
+9. **Resilient Recipe Fallback & Thumbnail Compression:** Sistem resep otomatis cadangan (uildFallbackRecipes) yang tetap memberikan ide olahan meski server AI 503, serta kompresi thumbnail persistent untuk penyimpanan hemat kuota AsyncStorage.
+10. **Pengujian & CI/CD (B11.2 & B11.4):** Pengujian unit otomatis dengan 14 skenario uji (tingkat kelulusan 100%, cakupan baris 98.68%), konfigurasi pipeline otomatisasi GitHub Actions (`ci.yml`), serta panduan kompilasi rilis di [DEPLOYMENT.md](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md).
 
 ---
 
@@ -53,6 +56,11 @@ Pencapaian utama pada milestone ini mencakup:
 | Donut Chart SVG & Recipe Detail Flow (FR-06) | W10 | Done | 100% | Grafik donat kesegaran di ResultScreen, Resep List & Detail |
 | History Storage, Reminders & Firestore Sync (FR-07) | W10–W11 | Done | 100% | AsyncStorage + Reminder Screen + Cloud Firestore sync |
 | Unit Testing, CI/CD & Deployment Prep | W11 | Done | 100% | 14 skenario uji lulus, GitHub Actions workflow siap |
+| Edit Profile, Change Password, Delete Account | W11 | Done | 100% | Halaman edit-profile.tsx dan change-password.tsx |
+| Firestore 5-Collection Architecture | W11 | Done | 100% | firestoreService.ts dengan users, saved_recipes, reminders, app_feedback |
+| Input Kuantitas Mode Pribadi | W11 | Done | 100% | Toggle Jumlah/Berat dengan preset chips di scanner.tsx |
+| Resilient Recipe Fallback | W11 | Done | 100% | buildFallbackRecipes() di resep-list.tsx |
+| Thumbnail Compression & Scanner Timeout | W11 | Done | 100% | createPersistentThumbnail() + AbortController 10s |
 
 ---
 
@@ -71,6 +79,9 @@ Pencapaian utama pada milestone ini mencakup:
 | **NFR-02** | Kunci API terisolasi di `.env` dan HTTPS tanpa hardcoded secrets | [DEPLOYMENT.md](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md)<br>[.gitignore](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) | **Tested** | Seluruh kredensial menggunakan prefix `EXPO_PUBLIC_` via `.env`, diverifikasi diabaikan git. |
 | **NFR-03** | Navigasi minimalis linear (tugas inti $\le$ 3 klik) | Expo Router Bottom Tabs Navigation | **Tested** | Alur linear: Buka Tab Scan (1) $\rightarrow$ Jepret Foto (2) $\rightarrow$ Hasil Analisis Langsung Tampil. |
 | **NFR-04** | Uptime penyimpanan riwayat 99.9% menggunakan managed cloud | Google Firebase Cloud Firestore | **Tested** | Arsitektur offline-first (AsyncStorage) dengan sinkronisasi background ke Firestore multi-region. |
+| **FR-08** | Pengguna dapat mengedit profil, ganti password, dan menghapus akun | [src/app/edit-profile.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/edit-profile.tsx)<br>[src/app/change-password.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/change-password.tsx)<br>[src/app/(tabs)/profile.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx) | **Tested** | Edit nama, upload foto, verifikasi email, ganti password dengan re-autentikasi, hapus akun permanen. |
+| **FR-09** | Database Firestore 5 collections terpusat | [src/services/firestoreService.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/services/firestoreService.ts) | **Tested** | Collections: users, scan_history, saved_recipes, eminders, pp_feedback dengan auto-increment scan count. |
+| **FR-10** | Input jumlah buah dengan preset chips pada Mode Pribadi | [src/app/(tabs)/scanner.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) | **Tested** | Toggle Jumlah Buah vs Berat, preset 1/2/3/5/10 buah dan 100g/250g/500g/1kg/2kg. |
 | **NFR-05** | Kompatibilitas responsif Android 10+ (API 29+) & iOS | Expo Framework Cross-Platform SDK 58 | **Tested** | Lulus verifikasi ekspor web (`npx expo export -p web`) dan build Android bundle. |
 
 ---
@@ -82,7 +93,9 @@ Pencapaian utama pada milestone ini mencakup:
 | **R-01** | Model Gemini versi lama mengalami depresiasi (HTTP 404) | High | High | Implementasi daftar model adaptif (`GEMINI_MODELS` array) dengan fallback otomatis ke model penerus aktif. | **Resolved** |
 | **R-02** | Kuota payload AsyncStorage terbatas (CursorWindow Error di Android) | Medium | High | Mengubah penyimpanan gambar lokal dari Base64 biner besar ke `photo.uri` file lokal, sedangkan file cloud diunggah via URL CDN Cloudinary. | **Resolved** |
 | **R-03** | Latensi jaringan saat mengunggah foto ke Cloud Firestore | High | Medium | Mengubah arsitektur penyimpanan cloud menjadi *fire-and-forget background task* tanpa memblokir perpindahan layar ke halaman hasil. | **Resolved** |
-| **R-04** | Ketergantungan native icons tidak terdaftar di package.json | Medium | High | Penambahan dependensi `@expo/vector-icons` dan `react-native-svg` melalui standard Expo package manager. | **Resolved** |
+| **R-04** | Ketergantungan native icons tidak terdaftar di package.json | Medium | High | Penambahan dependensi @expo/vector-icons dan eact-native-svg melalui standard Expo package manager. | **Resolved** |
+| **R-05** | Google Auth crash: ndroidClientId must be defined pada Expo Go | High | Critical | Konfigurasi Google.useAuthRequest() dengan ndroidClientId, iosClientId, dan webClientId menggunakan Web Client ID yang sama untuk flow OAuth berbasis browser di Expo Go. | **Resolved** |
+| **R-06** | Server AI Gemini mengembalikan HTTP 503 pada jam sibuk | Medium | Medium | Implementasi uildFallbackRecipes() di esep-list.tsx yang tetap menampilkan resep cadangan tanpa error ketika semua model AI tidak tersedia. | **Resolved** | Ketergantungan native icons tidak terdaftar di package.json | Medium | High | Penambahan dependensi `@expo/vector-icons` dan `react-native-svg` melalui standard Expo package manager. | **Resolved** |
 
 ---
 
@@ -148,6 +161,13 @@ Matriks kelengkapan fitur berikut mencakup status implementasi dan pembuktian te
 | NFR-03 | Navigasi inti linear <= 3 klik      | NFR      | COMPLETED (100%)      | Tabs Navigation architecture      |
 | NFR-04 | Database cloud uptime 99.9%         | NFR      | COMPLETED (100%)      | Google Cloud Firestore backend    |
 | NFR-05 | Kompatibilitas Android 10+ & iOS    | NFR      | COMPLETED (100%)      | Expo SDK 58 cross-platform bundle  |
+| FR-08  | Edit profil, ganti password, hapus  | Should   | COMPLETED (100%)      | src/app/edit-profile.tsx            |
+|        | akun, foto profil, mode default     |          |                       | src/app/change-password.tsx         |
+| FR-09  | Database Firestore 5 collections    | Must     | COMPLETED (100%)      | src/services/firestoreService.ts    |
+|        | (users, scan_history, saved_recipes |          |                       | Integrasi signup, signin, scanner   |
+|        |  reminders, app_feedback)           |          |                       |                                     |
+| FR-10  | Input jumlah buah & preset chips    | Should   | COMPLETED (100%)      | Toggle Jumlah/Berat di scanner.tsx  |
+|        | pada Mode Pribadi                   |          |                       | Preset 1-10 buah & 100g-2kg        |
 +--------------------------------------------------------------------------------------------------------------------+
 ```
 
