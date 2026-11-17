@@ -21,6 +21,7 @@ import {
 
 // --- IMPORT FIREBASE ---
 import { addDoc, collection } from "firebase/firestore";
+import { saveScanResult } from "../../services/firestoreService";
 import { auth, db } from "../../firebaseConfig";
 
 // --- PENGATURAN MODEL GEMINI ---
@@ -221,6 +222,10 @@ export default function ScannerScreen() {
   const [lebar, setLebar] = useState("");
   const [tinggi, setTinggi] = useState("");
   const [berat, setBerat] = useState("");
+  const [jumlahBuah, setJumlahBuah] = useState("");
+  const [inputTypePribadi, setInputTypePribadi] = useState<
+    "jumlah" | "berat"
+  >("jumlah");
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -341,6 +346,8 @@ export default function ScannerScreen() {
     setLebar("");
     setTinggi("");
     setBerat("");
+    setJumlahBuah("");
+    setInputTypePribadi("jumlah");
   };
 
   // Simpan ke history lokal (AsyncStorage)
@@ -365,9 +372,11 @@ export default function ScannerScreen() {
       const existingHistory = await AsyncStorage.getItem("@freshia_history");
       const historyArray = existingHistory ? JSON.parse(existingHistory) : [];
       historyArray.unshift(newEntry);
+      // Batasi history maks 50 entry untuk mencegah CursorWindow overflow pada Android
+      const trimmedHistory = historyArray.slice(0, 50);
       await AsyncStorage.setItem(
         "@freshia_history",
-        JSON.stringify(historyArray),
+        JSON.stringify(trimmedHistory),
       );
     } catch (e) {
       console.error("Gagal menyimpan ke history lokal", e);
@@ -399,7 +408,7 @@ export default function ScannerScreen() {
     const detailParameter =
       selectedMode === "Bisnis"
         ? `Mode Bisnis (stok komersial/keranjang). Dimensi wadah: Panjang ${panjang || "-"} cm, Lebar ${lebar || "-"} cm, Tinggi ${tinggi || "-"} cm.`
-        : `Mode Pribadi (konsumsi rumah tangga). Estimasi berat buah: ${berat || "-"} gram/kg.`;
+        : `Mode Pribadi (konsumsi rumah tangga). ${jumlahBuah ? `Jumlah buah: ${jumlahBuah} buah.` : ""} ${berat ? `Estimasi berat buah: ${berat} gram/kg.` : ""} ${!jumlahBuah && !berat ? "Tidak ada info berat/jumlah." : ""}`;
 
     const prompt = `Kamu adalah ahli agronomi dan botani buah profesional untuk aplikasi Freshia.
 Analisis gambar buah ini secara visual murni dari nol.
@@ -572,7 +581,7 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
       // E. UPLOAD CLOUDINARY (OPSIONAL) & SIMPAN PERMANEN KE FIRESTORE (Base64 fallback)
       const currentUserId = auth.currentUser?.uid || null;
       const metadataInput =
-        selectedMode === "Bisnis" ? { panjang, lebar, tinggi } : { berat };
+        selectedMode === "Bisnis" ? { panjang, lebar, tinggi } : { berat, jumlahBuah };
 
       (async () => {
         try {
@@ -586,19 +595,18 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
             );
           }
 
-          const docRef = await addDoc(collection(db, "scan_history"), {
-            user_id: currentUserId,
+          const firestoreId = await saveScanResult({
+            userId: currentUserId,
             imageUrl: finalImageUrl,
             label: rawClass,
             confidence: confidenceScore,
             analysis: geminiAnalysis,
-            mode: selectedMode,
+            mode: selectedMode || "Pribadi",
             parameters: metadataInput,
-            timestamp: new Date(),
           });
 
-          await linkFirestoreId(entryId, docRef.id);
-          console.log("Berhasil tersimpan ke Firestore ID:", docRef.id);
+          await linkFirestoreId(entryId, firestoreId);
+          console.log("Berhasil tersimpan ke Firestore ID:", firestoreId);
         } catch (dbError) {
           console.warn("Gagal menyimpan ke Firestore:", dbError);
         }
@@ -851,14 +859,127 @@ Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backtick
 
           {selectedMode === "Pribadi" && (
             <View style={styles.weightContainer}>
-              <Text style={styles.inputLabel}>Berat</Text>
-              <TextInput
-                style={styles.weightInput}
-                placeholder="Contoh: 500 gram / 1 kg"
-                placeholderTextColor="#A0A0A0"
-                value={berat}
-                onChangeText={setBerat}
-              />
+              {/* Toggle: Jumlah Buah vs Berat */}
+              <View style={styles.inputToggleRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.inputTogglePill,
+                    inputTypePribadi === "jumlah" && styles.inputTogglePillActive,
+                  ]}
+                  onPress={() => setInputTypePribadi("jumlah")}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons
+                    name="fruit-cherries"
+                    size={14}
+                    color={inputTypePribadi === "jumlah" ? "#9A1B17" : "#A0A0A0"}
+                  />
+                  <Text
+                    style={[
+                      styles.inputToggleText,
+                      inputTypePribadi === "jumlah" && styles.inputToggleTextActive,
+                    ]}
+                  >
+                    Jumlah Buah
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.inputTogglePill,
+                    inputTypePribadi === "berat" && styles.inputTogglePillActive,
+                  ]}
+                  onPress={() => setInputTypePribadi("berat")}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons
+                    name="weight-gram"
+                    size={14}
+                    color={inputTypePribadi === "berat" ? "#9A1B17" : "#A0A0A0"}
+                  />
+                  <Text
+                    style={[
+                      styles.inputToggleText,
+                      inputTypePribadi === "berat" && styles.inputToggleTextActive,
+                    ]}
+                  >
+                    Berat
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Input Jumlah Buah */}
+              {inputTypePribadi === "jumlah" && (
+                <View>
+                  <Text style={styles.inputLabel}>Berapa buah yang dimiliki?</Text>
+                  <View style={styles.quantityChipsRow}>
+                    {["1", "2", "3", "5", "10"].map((qty) => (
+                      <TouchableOpacity
+                        key={qty}
+                        style={[
+                          styles.quantityChip,
+                          jumlahBuah === qty && styles.quantityChipActive,
+                        ]}
+                        onPress={() => setJumlahBuah(jumlahBuah === qty ? "" : qty)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.quantityChipText,
+                            jumlahBuah === qty && styles.quantityChipTextActive,
+                          ]}
+                        >
+                          {qty} buah
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={styles.weightInput}
+                    placeholder="Atau ketik jumlah lain..."
+                    placeholderTextColor="#A0A0A0"
+                    keyboardType="numeric"
+                    value={jumlahBuah}
+                    onChangeText={setJumlahBuah}
+                  />
+                </View>
+              )}
+
+              {/* Input Berat */}
+              {inputTypePribadi === "berat" && (
+                <View>
+                  <Text style={styles.inputLabel}>Estimasi berat buah</Text>
+                  <View style={styles.quantityChipsRow}>
+                    {["100g", "250g", "500g", "1kg", "2kg"].map((w) => (
+                      <TouchableOpacity
+                        key={w}
+                        style={[
+                          styles.quantityChip,
+                          berat === w && styles.quantityChipActive,
+                        ]}
+                        onPress={() => setBerat(berat === w ? "" : w)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.quantityChipText,
+                            berat === w && styles.quantityChipTextActive,
+                          ]}
+                        >
+                          {w}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={styles.weightInput}
+                    placeholder="Atau ketik berat lain (cth: 300 gram)"
+                    placeholderTextColor="#A0A0A0"
+                    value={berat}
+                    onChangeText={setBerat}
+                  />
+                </View>
+              )}
             </View>
           )}
 
@@ -1168,6 +1289,65 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: "#1C1C1E",
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+  },
+
+  /* Toggle Jumlah/Berat */
+  inputToggleRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  inputTogglePill: {
+    flex: 1,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#E5DADA",
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 5,
+  },
+  inputTogglePillActive: {
+    borderColor: "#9A1B17",
+    backgroundColor: "#FFF5F5",
+  },
+  inputToggleText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#A0A0A0",
+  },
+  inputToggleTextActive: {
+    color: "#9A1B17",
+    fontWeight: "700",
+  },
+  quantityChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  quantityChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5DADA",
+    backgroundColor: "#FFFFFF",
+  },
+  quantityChipActive: {
+    borderColor: "#9A1B17",
+    backgroundColor: "#FFF0F0",
+  },
+  quantityChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#A0A0A0",
+  },
+  quantityChipTextActive: {
+    color: "#9A1B17",
+    fontWeight: "700",
   },
 
   /* Tombol Analisis */

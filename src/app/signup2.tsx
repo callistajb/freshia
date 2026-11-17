@@ -22,6 +22,7 @@ import {
     View,
 } from "react-native";
 import { auth } from "../firebaseConfig";
+import { createOrUpdateUserProfile } from "../services/firestoreService";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
 
 export default function SignUpStepTwoScreen() {
@@ -95,6 +96,14 @@ export default function SignUpStepTwoScreen() {
           displayName: fullName.trim(),
         });
       }
+
+      // Simpan profil user ke Firestore collection "users"
+      await createOrUpdateUserProfile({
+        uid: userCredential.user.uid,
+        displayName: fullName?.trim() || email?.split("@")[0] || "User",
+        email: email?.trim() || userCredential.user.email || "",
+        provider: "email",
+      });
 
       await signOut(auth);
       showNotification(

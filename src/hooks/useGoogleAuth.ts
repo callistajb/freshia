@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
 import { auth } from "../firebaseConfig";
+import { createOrUpdateUserProfile } from "../services/firestoreService";
 
 if (Platform.OS !== "web") {
   WebBrowser.maybeCompleteAuthSession();
@@ -21,7 +22,13 @@ if (Platform.OS !== "web") {
 
 const WEB_CLIENT_ID =
   "871076206639-ht4gn47j53ug1i0ekq1v7vb655rfgthm.apps.googleusercontent.com";
-const PROXY_REDIRECT_URI = "https://auth.expo.io/@sorye/freshia";
+
+// Gunakan makeRedirectUri() agar otomatis bekerja di Expo Go, dev build, maupun standalone
+const REDIRECT_URI = makeRedirectUri({
+  scheme: "freshia",
+  // Untuk Expo Go di dev, akan otomatis menggunakan scheme exp://
+  // Untuk standalone build, akan menggunakan scheme "freshia"
+});
 
 export function useGoogleAuth() {
   const router = useRouter();
@@ -34,17 +41,13 @@ export function useGoogleAuth() {
     [],
   );
 
-  const [request, response] = useAuthRequest(
-    {
-      clientId: WEB_CLIENT_ID,
-      redirectUri: PROXY_REDIRECT_URI,
-      responseType: ResponseType.IdToken,
-      usePKCE: false,
-      scopes: ["openid", "profile", "email"],
-      extraParams,
-    },
-    Google.discovery,
-  );
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: WEB_CLIENT_ID,
+    androidClientId: WEB_CLIENT_ID,
+    iosClientId: WEB_CLIENT_ID,
+    scopes: ["openid", "profile", "email"],
+    redirectUri: REDIRECT_URI,
+  });
 
   const showError = (message: string) => {
     if (Platform.OS === "web") {
@@ -59,18 +62,29 @@ export function useGoogleAuth() {
 
     if (response?.type === "success") {
       const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
-      setGoogleLoading(true);
-      signInWithCredential(auth, credential)
-        .then(() => {
-          router.replace("/(tabs)");
-        })
-        .catch((err) => {
-          showError(err.message);
-        })
-        .finally(() => {
-          setGoogleLoading(false);
-        });
+      const token = id_token;
+      if (token) {
+        const credential = GoogleAuthProvider.credential(token);
+        setGoogleLoading(true);
+        signInWithCredential(auth, credential)
+          .then((userCredential) => {
+            // Simpan profil user Google ke Firestore
+            createOrUpdateUserProfile({
+              uid: userCredential.user.uid,
+              displayName: userCredential.user.displayName || "User",
+              email: userCredential.user.email || "",
+              photoURL: userCredential.user.photoURL || undefined,
+              provider: "google",
+            }).catch(() => {}); // Fire-and-forget
+            router.replace("/(tabs)");
+          })
+          .catch((err) => {
+            showError(err.message);
+          })
+          .finally(() => {
+            setGoogleLoading(false);
+          });
+      }
     } else if (response?.type === "error") {
       showError(
         response.error?.description ||
@@ -83,33 +97,26 @@ export function useGoogleAuth() {
     setGoogleLoading(true);
     try {
       if (Platform.OS === "web") {
+        // Web: gunakan Firebase popup langsung
         const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
+        const result = await signInWithPopup(auth, provider);
+        // Simpan profil user Google ke Firestore
+        createOrUpdateUserProfile({
+          uid: result.user.uid,
+          displayName: result.user.displayName || "User",
+          email: result.user.email || "",
+          photoURL: result.user.photoURL || undefined,
+          provider: "google",
+        }).catch(() => {}); // Fire-and-forget
         router.replace("/(tabs)");
-      } else if (request) {
-        const returnUrl = makeRedirectUri();
-        const authUrl = await request.makeAuthUrlAsync(Google.discovery);
-        const startUrl = `${PROXY_REDIRECT_URI}/start?${new URLSearchParams({
-          authUrl,
-          returnUrl,
-        }).toString()}`;
-
-        const result = await WebBrowser.openAuthSessionAsync(
-          startUrl,
-          returnUrl,
+      } else if (promptAsync) {
+        // Mobile: gunakan expo-auth-session Google provider
+        await promptAsync();
+        // Response akan ditangkap oleh useEffect di atas
+      } else {
+        showError(
+          "Google Sign-In belum siap. Pastikan koneksi internet aktif, lalu coba lagi.",
         );
-
-        if (result.type === "success" && result.url) {
-          const urlObj = new URL(result.url.replace("#", "?"));
-          const idToken = urlObj.searchParams.get("id_token");
-          if (idToken) {
-            const credential = GoogleAuthProvider.credential(idToken);
-            await signInWithCredential(auth, credential);
-            router.replace("/(tabs)");
-          } else {
-            showError("Token Google tidak ditemukan pada respons.");
-          }
-        }
       }
     } catch (error: any) {
       if (error.code !== "auth/popup-closed-by-user") {
@@ -118,7 +125,10 @@ export function useGoogleAuth() {
         );
       }
     } finally {
-      setGoogleLoading(false);
+      // Untuk mobile, loading state ditangani oleh useEffect setelah response
+      if (Platform.OS === "web") {
+        setGoogleLoading(false);
+      }
     }
   };
 

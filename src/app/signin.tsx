@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { auth } from "../firebaseConfig";
+import { createOrUpdateUserProfile } from "../services/firestoreService";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
 
 export default function SignInScreen() {
@@ -48,7 +49,16 @@ export default function SignInScreen() {
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+
+      // Update lastLoginAt di Firestore (buat profil jika belum ada)
+      createOrUpdateUserProfile({
+        uid: credential.user.uid,
+        displayName: credential.user.displayName || email.trim().split("@")[0],
+        email: email.trim(),
+        provider: "email",
+      }).catch(() => {}); // Fire-and-forget
+
       router.replace("/(tabs)");
     } catch (error: any) {
       let errorMessage = "Terjadi kesalahan saat login.";

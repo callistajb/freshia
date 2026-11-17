@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1C0303",
     ...(Platform.OS === "web" && {
       // Mengatasi sisa putih pas di-inspect web agar ikut gelap menyatu
-      minHeight: "100vh",
+      minHeight: ("100vh" as any),
     }),
   },
   leafTopLeft: {
