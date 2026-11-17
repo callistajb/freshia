@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { useCallback, useEffect, useState } from "react";
 import {
   Image,
   Platform,
@@ -12,19 +14,58 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../../firebaseConfig";
+import { auth, db } from "../../firebaseConfig";
 
 export interface ReminderItem {
   id: string;
   name: string;
   daysLeft: string;
+  remainingDaysNum: number;
   imageUri?: string;
+  mode?: string;
+  analysis?: any;
 }
+
+const calculateDynamicShelfLife = (
+  rawShelfLife: string,
+  scanDateMs: number,
+): { label: string; remainingDays: number } => {
+  const match = String(rawShelfLife || "").match(/(\d+)/);
+  if (!match) {
+    return { label: rawShelfLife || "Segera konsumsi", remainingDays: 1 };
+  }
+
+  const initialDays = parseInt(match[1], 10);
+  const now = new Date();
+  const scanDate = new Date(scanDateMs);
+
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfScanDay = new Date(
+    scanDate.getFullYear(),
+    scanDate.getMonth(),
+    scanDate.getDate(),
+  ).getTime();
+
+  const elapsedDays = Math.max(
+    0,
+    Math.floor((startOfToday - startOfScanDay) / (1000 * 60 * 60 * 24)),
+  );
+  const remaining = Math.max(0, initialDays - elapsedDays);
+
+  if (remaining === 0) {
+    return { label: "Hari ini terakhir", remainingDays: 0 };
+  }
+  return { label: `${remaining} hari lagi`, remainingDays: remaining };
+};
 
 export default function HomeScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
-  const [reminders] = useState<ReminderItem[]>([]);
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -32,6 +73,128 @@ export default function HomeScreen() {
     });
     return unsubscribe;
   }, []);
+
+  const loadHomeReminders = useCallback(async () => {
+    const currentUid = auth.currentUser?.uid;
+    let items: ReminderItem[] = [];
+
+    // 1. Baca dari AsyncStorage (@freshia_history) terlebih dahulu
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          items = parsed
+            .filter((entry: any) => {
+              if (currentUid && entry.userId && entry.userId !== currentUid) {
+                return false;
+              }
+              const pct = Number(
+                entry.result?.analysis?.freshnessPercentage ?? 0,
+              );
+              const label = String(entry.result?.label || "Buah").toLowerCase();
+              const isNotFruit =
+                pct === 0 && (label === "buah" || label === "unknown");
+              return !isNotFruit;
+            })
+            .map((entry: any) => {
+              const fruitName = String(entry.result?.label || "Buah");
+              const rawShelf = String(
+                entry.result?.analysis?.shelfLife || "3 hari",
+              );
+              const scanTimestamp = Number(entry.id) || Date.now();
+              const { label, remainingDays } = calculateDynamicShelfLife(
+                rawShelf,
+                scanTimestamp,
+              );
+
+              return {
+                id: String(entry.id),
+                name: fruitName,
+                daysLeft: label,
+                remainingDaysNum: remainingDays,
+                imageUri: entry.image,
+                mode: entry.mode,
+                analysis: entry.result?.analysis,
+              };
+            });
+        }
+      }
+    } catch (e) {
+      console.warn("Gagal membaca reminder lokal di Home:", e);
+    }
+
+    // 2. Sinkronisasi dengan Cloud Firestore jika data lokal masih kosong (tanpa composite index)
+    if (items.length === 0) {
+      try {
+        const historyRef = collection(db, "scan_history");
+        const q = currentUid
+          ? query(historyRef, where("user_id", "==", currentUid))
+          : query(historyRef);
+
+        const snapshot = await getDocs(q);
+        const sortedDocs = [...snapshot.docs].sort((a, b) => {
+          const tsA = a.data().timestamp?.toMillis
+            ? a.data().timestamp.toMillis()
+            : a.data().timestamp
+              ? new Date(a.data().timestamp).getTime()
+              : 0;
+          const tsB = b.data().timestamp?.toMillis
+            ? b.data().timestamp.toMillis()
+            : b.data().timestamp
+              ? new Date(b.data().timestamp).getTime()
+              : 0;
+          return tsB - tsA;
+        });
+
+        items = sortedDocs
+          .map((docSnap) => {
+            const data = docSnap.data();
+            const pct = Number(data.analysis?.freshnessPercentage ?? 0);
+            const fruitName = String(data.label || "Buah");
+            const isNotFruit =
+              pct === 0 &&
+              (fruitName.toLowerCase() === "buah" ||
+                fruitName.toLowerCase() === "unknown");
+            if (isNotFruit) return null;
+
+            const scanMs = data.timestamp?.toDate
+              ? data.timestamp.toDate().getTime()
+              : Date.now();
+            const rawShelf = String(data.analysis?.shelfLife || "3 hari");
+            const { label, remainingDays } = calculateDynamicShelfLife(
+              rawShelf,
+              scanMs,
+            );
+
+            return {
+              id: docSnap.id,
+              name: fruitName,
+              daysLeft: label,
+              remainingDaysNum: remainingDays,
+              imageUri: data.imageUrl,
+              mode: data.mode,
+              analysis: data.analysis,
+            };
+          })
+          .filter(Boolean) as ReminderItem[];
+      } catch (cloudErr) {
+        console.warn(
+          "Sinkronisasi reminder Home Firestore dilewati:",
+          cloudErr,
+        );
+      }
+    }
+
+    items.sort((a, b) => a.remainingDaysNum - b.remainingDaysNum);
+    setReminders(items.slice(0, 3));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeReminders();
+    }, [loadHomeReminders]),
+  );
 
   const displayName =
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
@@ -152,7 +315,20 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={styles.detailButton}
                     activeOpacity={0.85}
-                    onPress={() => router.push("/(tabs)/history")}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/result",
+                        params: {
+                          id: item.id,
+                          detection: item.name,
+                          mode: item.mode || "Pribadi",
+                          imageUri: item.imageUri || "",
+                          analysis: item.analysis
+                            ? JSON.stringify(item.analysis)
+                            : "",
+                        },
+                      })
+                    }
                   >
                     <Text style={styles.detailButtonText}>Lihat Detail ›</Text>
                   </TouchableOpacity>
@@ -382,6 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 12,
+    marginBottom: 8,
   },
   fruitInfo: {
     flex: 1,

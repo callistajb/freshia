@@ -1,30 +1,202 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { useCallback, useState } from "react";
 import {
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { auth, db } from "../firebaseConfig";
 
 export interface FruitReminder {
   id: string;
   name: string;
   daysLeft: string;
+  remainingDaysNum: number;
   storageTip: string;
   imageUri?: string;
+  mode?: string;
+  analysis?: any;
 }
+
+// Menghitung sisa hari secara dinamis dari tanggal scan hingga hari ini
+const calculateDynamicShelfLife = (
+  rawShelfLife: string,
+  scanDateMs: number,
+): { label: string; remainingDays: number } => {
+  const match = String(rawShelfLife || "").match(/(\d+)/);
+  if (!match) {
+    return { label: rawShelfLife || "Segera konsumsi", remainingDays: 1 };
+  }
+
+  const initialDays = parseInt(match[1], 10);
+  const now = new Date();
+  const scanDate = new Date(scanDateMs);
+
+  // Hitung selisih hari kalender (00:00)
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfScanDay = new Date(
+    scanDate.getFullYear(),
+    scanDate.getMonth(),
+    scanDate.getDate(),
+  ).getTime();
+
+  const elapsedDays = Math.max(
+    0,
+    Math.floor((startOfToday - startOfScanDay) / (1000 * 60 * 60 * 24)),
+  );
+  const remaining = Math.max(0, initialDays - elapsedDays);
+
+  if (remaining === 0) {
+    return { label: "Hari ini terakhir", remainingDays: 0 };
+  }
+  return { label: `${remaining} hari lagi`, remainingDays: remaining };
+};
+
+// Tips penyimpanan otomatis sesuai jenis buah
+const getStorageTipByFruit = (fruitName: string): string => {
+  const lower = fruitName.toLowerCase();
+  if (lower.includes("pisang") || lower.includes("banana")) {
+    return "Jangan simpan di kulkas. Simpan di suhu ruangan";
+  }
+  if (lower.includes("melon") || lower.includes("semangka")) {
+    return "Jangan simpan di kulkas utuh. Simpan di suhu ruangan";
+  }
+  if (lower.includes("blueberry") || lower.includes("anggur")) {
+    return "Simpan di kulkas dalam wadah tertutup";
+  }
+  return "Simpan di kulkas agar lebih awet";
+};
 
 export default function ReminderScreen() {
   const router = useRouter();
+  const [reminders, setReminders] = useState<FruitReminder[]>([]);
 
-  // Dikosongkan dulu secara default karena belum ada hasil scan buah
-  const [reminders] = useState<FruitReminder[]>([]);
+  const loadReminders = useCallback(async () => {
+    const currentUid = auth.currentUser?.uid;
+    let items: FruitReminder[] = [];
+
+    // 1. Baca dari cache lokal AsyncStorage (@freshia_history)
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          items = parsed
+            .filter((entry: any) => {
+              if (currentUid && entry.userId && entry.userId !== currentUid) {
+                return false;
+              }
+              const pct = Number(
+                entry.result?.analysis?.freshnessPercentage ?? 0,
+              );
+              const label = String(entry.result?.label || "Buah").toLowerCase();
+              const isNotFruit =
+                pct === 0 && (label === "buah" || label === "unknown");
+              return !isNotFruit;
+            })
+            .map((entry: any) => {
+              const fruitName = String(entry.result?.label || "Buah");
+              const rawShelf = String(
+                entry.result?.analysis?.shelfLife || "3 hari",
+              );
+              const scanTimestamp = Number(entry.id) || Date.now();
+              const { label, remainingDays } = calculateDynamicShelfLife(
+                rawShelf,
+                scanTimestamp,
+              );
+
+              return {
+                id: String(entry.id),
+                name: fruitName,
+                daysLeft: label,
+                remainingDaysNum: remainingDays,
+                storageTip: getStorageTipByFruit(fruitName),
+                imageUri: entry.image,
+                mode: entry.mode,
+                analysis: entry.result?.analysis,
+              };
+            });
+        }
+      }
+    } catch (e) {
+      console.warn("Gagal membaca reminder dari lokal:", e);
+    }
+
+    // 2. Sinkronisasi dengan Cloud Firestore jika lokal kosong
+    if (items.length === 0) {
+      try {
+        const historyRef = collection(db, "scan_history");
+        const q = currentUid
+          ? query(
+              historyRef,
+              where("user_id", "==", currentUid),
+              orderBy("timestamp", "desc"),
+            )
+          : query(historyRef, orderBy("timestamp", "desc"));
+
+        const snapshot = await getDocs(q);
+        items = snapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data();
+            const pct = Number(data.analysis?.freshnessPercentage ?? 0);
+            const fruitName = String(data.label || "Buah");
+            const isNotFruit =
+              pct === 0 &&
+              (fruitName.toLowerCase() === "buah" ||
+                fruitName.toLowerCase() === "unknown");
+            if (isNotFruit) return null;
+
+            const scanMs = data.timestamp?.toDate
+              ? data.timestamp.toDate().getTime()
+              : Date.now();
+            const rawShelf = String(data.analysis?.shelfLife || "3 hari");
+            const { label, remainingDays } = calculateDynamicShelfLife(
+              rawShelf,
+              scanMs,
+            );
+
+            return {
+              id: docSnap.id,
+              name: fruitName,
+              daysLeft: label,
+              remainingDaysNum: remainingDays,
+              storageTip: getStorageTipByFruit(fruitName),
+              imageUri: data.imageUrl,
+              mode: data.mode,
+              analysis: data.analysis,
+            };
+          })
+          .filter(Boolean) as FruitReminder[];
+      } catch (cloudErr) {
+        console.warn("Sinkronisasi reminder Firestore dilewati:", cloudErr);
+      }
+    }
+
+    // Urutkan dari sisa hari paling sedikit (paling mendesak) di atas
+    items.sort((a, b) => a.remainingDaysNum - b.remainingDaysNum);
+    setReminders(items);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadReminders();
+    }, [loadReminders]),
+  );
+
+  // Hitung jumlah buah yang kritis (<= 3 hari lagi)
+  const urgentCount = reminders.filter((r) => r.remainingDaysNum <= 3).length;
 
   return (
     <View style={styles.root}>
@@ -66,7 +238,8 @@ export default function ReminderScreen() {
 
             <View style={styles.summaryTextBox}>
               <Text style={styles.summaryTitle}>
-                {reminders.length} buah akan segera busuk
+                {urgentCount > 0 ? urgentCount : reminders.length} buah akan
+                segera busuk
               </Text>
               <Text style={styles.summarySubtitle}>
                 Segera konsumsi agar tidak terbuang!
@@ -141,7 +314,15 @@ export default function ReminderScreen() {
                       onPress={() =>
                         router.push({
                           pathname: "/result",
-                          params: { id: item.id, name: item.name },
+                          params: {
+                            id: item.id,
+                            detection: item.name,
+                            mode: item.mode || "Pribadi",
+                            imageUri: item.imageUri || "",
+                            analysis: item.analysis
+                              ? JSON.stringify(item.analysis)
+                              : "",
+                          },
                         })
                       }
                     >

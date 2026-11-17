@@ -1,9 +1,19 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { useEffect, useMemo, useState } from "react";
 import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Alert,
   Image,
   Platform,
   ScrollView,
@@ -13,16 +23,23 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../../firebaseConfig";
+import { auth, db } from "../../firebaseConfig";
 
 export interface ScanHistoryItem {
   id: string;
+  firestoreId?: string;
   fruitName: string; // Contoh: "Pisang" -> tampil sebagai "Scanned Pisang"
   dateTime: string; // Contoh: "23 September 2026 • 13.00 WIB"
   mode: "Mode Bisnis" | "Mode Pribadi";
   freshnessPercent: number; // Contoh: 90 atau 15
   status: "diproses" | "butuh_perhatian";
   imageUri?: string;
+  analysis?: {
+    freshnessPercentage: number;
+    salvageValue: string;
+    shelfLife: string;
+    recipe: string;
+  };
 }
 
 type FilterTab = "terbaru" | "diproses" | "butuh_perhatian";
@@ -32,8 +49,7 @@ export default function HistoryScreen() {
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [imgError, setImgError] = useState(false);
 
-  // Dikosongkan dulu secara default karena belum ada riwayat scan
-  const [historyList] = useState<ScanHistoryItem[]>([]);
+  const [historyList, setHistoryList] = useState<ScanHistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("terbaru");
 
@@ -44,6 +60,243 @@ export default function HistoryScreen() {
     });
     return unsubscribe;
   }, []);
+
+  // Memuat riwayat dari AsyncStorage (Offline-First) lalu menyinkronkan dengan Firestore
+  const loadHistoryData = useCallback(async () => {
+    const currentUid = auth.currentUser?.uid;
+
+    // 1. Baca dari cache lokal AsyncStorage dulu agar tampil instan
+    let localItems: ScanHistoryItem[] = [];
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          localItems = parsed
+            .filter(
+              (entry: any) =>
+                !currentUid || !entry.userId || entry.userId === currentUid,
+            )
+            .map((entry: any) => {
+              const pct = Number(
+                entry.result?.analysis?.freshnessPercentage ?? 0,
+              );
+              const rawMode = String(entry.mode || "Pribadi");
+              return {
+                id: String(entry.id),
+                firestoreId: entry.firestoreId,
+                fruitName: String(entry.result?.label || "Buah"),
+                dateTime: String(entry.date || "-"),
+                mode:
+                  rawMode === "Bisnis" || rawMode === "Mode Bisnis"
+                    ? "Mode Bisnis"
+                    : "Mode Pribadi",
+                freshnessPercent: pct,
+                status: pct >= 50 ? "diproses" : "butuh_perhatian",
+                imageUri: entry.image,
+                analysis: entry.result?.analysis,
+              };
+            });
+          setHistoryList(localItems);
+        }
+      }
+    } catch (e) {
+      console.warn("Gagal membaca riwayat lokal:", e);
+    }
+
+    // 2. Sinkronisasi dengan Cloud Firestore (collection: scan_history) tanpa composite index
+    try {
+      const historyRef = collection(db, "scan_history");
+      const q = currentUid
+        ? query(historyRef, where("user_id", "==", currentUid))
+        : query(historyRef);
+
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const sortedDocs = [...snapshot.docs].sort((a, b) => {
+          const tsA = a.data().timestamp?.toMillis
+            ? a.data().timestamp.toMillis()
+            : a.data().timestamp
+              ? new Date(a.data().timestamp).getTime()
+              : 0;
+          const tsB = b.data().timestamp?.toMillis
+            ? b.data().timestamp.toMillis()
+            : b.data().timestamp
+              ? new Date(b.data().timestamp).getTime()
+              : 0;
+          return tsB - tsA;
+        });
+
+        const cloudItems: ScanHistoryItem[] = sortedDocs.map((docSnap) => {
+          const data = docSnap.data();
+          const pct = Number(data.analysis?.freshnessPercentage ?? 0);
+          const rawMode = String(data.mode || "Pribadi");
+
+          let formattedDate = "-";
+          if (data.timestamp?.toDate) {
+            formattedDate = data.timestamp.toDate().toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          } else if (data.timestamp) {
+            formattedDate = new Date(data.timestamp).toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          }
+
+          return {
+            id: docSnap.id,
+            firestoreId: docSnap.id,
+            fruitName: String(data.label || "Buah"),
+            dateTime: formattedDate,
+            mode:
+              rawMode === "Bisnis" || rawMode === "Mode Bisnis"
+                ? "Mode Bisnis"
+                : "Mode Pribadi",
+            freshnessPercent: pct,
+            status: pct >= 50 ? "diproses" : "butuh_perhatian",
+            imageUri: data.imageUrl,
+            analysis: data.analysis,
+          };
+        });
+
+        // Gabungkan data cloud dengan lokal yang mungkin belum ter-upload
+        const cloudIds = new Set(cloudItems.map((c) => c.firestoreId));
+        const unsyncedLocals = localItems.filter(
+          (l) => !l.firestoreId || !cloudIds.has(l.firestoreId),
+        );
+        setHistoryList([...unsyncedLocals, ...cloudItems]);
+      }
+    } catch (cloudErr) {
+      // Jika offline, tetap gunakan data lokal
+      console.warn("Sinkronisasi Firestore dilewati:", cloudErr);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHistoryData();
+    }, [loadHistoryData]),
+  );
+
+  // Hapus satu item riwayat dari state, AsyncStorage, dan Firestore
+  const performDeleteSingle = async (item: ScanHistoryItem) => {
+    setHistoryList((prev) => prev.filter((entry) => entry.id !== item.id));
+
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter(
+            (entry: any) =>
+              String(entry.id) !== item.id &&
+              String(entry.firestoreId || "") !== (item.firestoreId || item.id),
+          );
+          await AsyncStorage.setItem(
+            "@freshia_history",
+            JSON.stringify(updated),
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Gagal menghapus item lokal:", e);
+    }
+
+    const docIdToDelete = item.firestoreId || item.id;
+    if (docIdToDelete) {
+      try {
+        await deleteDoc(doc(db, "scan_history", docIdToDelete));
+      } catch (err) {
+        console.warn("Penghapusan dokumen Firestore dilewati:", err);
+      }
+    }
+  };
+
+  const handleDeleteItem = (item: ScanHistoryItem) => {
+    const title = "Hapus Riwayat";
+    const message = `Hapus riwayat "Scanned ${item.fruitName}"?`;
+
+    if (Platform.OS === "web") {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        performDeleteSingle(item);
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: () => performDeleteSingle(item),
+        },
+      ]);
+    }
+  };
+
+  // Hapus seluruh riwayat milik pengguna saat ini
+  const performClearAll = async () => {
+    const currentUid = auth.currentUser?.uid;
+    const itemsToDelete = [...historyList];
+    setHistoryList([]);
+
+    try {
+      const stored = await AsyncStorage.getItem("@freshia_history");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const remaining = currentUid
+            ? parsed.filter(
+                (entry: any) => entry.userId && entry.userId !== currentUid,
+              )
+            : [];
+          await AsyncStorage.setItem(
+            "@freshia_history",
+            JSON.stringify(remaining),
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Gagal mengosongkan riwayat lokal:", e);
+    }
+
+    try {
+      const deletePromises = itemsToDelete
+        .map((item) => item.firestoreId || item.id)
+        .filter(Boolean)
+        .map((docId) => deleteDoc(doc(db, "scan_history", docId)));
+      await Promise.allSettled(deletePromises);
+    } catch (err) {
+      console.warn("Penghapusan massal Firestore dilewati:", err);
+    }
+  };
+
+  const handleClearAll = () => {
+    const title = "Hapus Semua Riwayat";
+    const message =
+      "Semua riwayat pemindaian buah akan dihapus permanen. Lanjutkan?";
+
+    if (Platform.OS === "web") {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        performClearAll();
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus Semua",
+          style: "destructive",
+          onPress: performClearAll,
+        },
+      ]);
+    }
+  };
 
   const displayName =
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
@@ -142,10 +395,25 @@ export default function HistoryScreen() {
             resizeMode="contain"
           />
 
-          <Text style={styles.sectionTitle}>Daftar Hasil Scan</Text>
-          <Text style={styles.sectionSubtitle}>
-            Riwayat buah yang pernah kamu scan
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Daftar Hasil Scan</Text>
+              <Text style={styles.sectionSubtitle}>
+                Riwayat buah yang pernah kamu scan
+              </Text>
+            </View>
+
+            {historyList.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearAllButton}
+                activeOpacity={0.75}
+                onPress={handleClearAll}
+              >
+                <Ionicons name="trash-outline" size={14} color="#C8201B" />
+                <Text style={styles.clearAllText}>Hapus Semua</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Search Bar: Cari Riwayat */}
           <View style={styles.searchBox}>
@@ -272,7 +540,16 @@ export default function HistoryScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/result",
-                      params: { id: item.id, name: item.fruitName },
+                      params: {
+                        id: item.id,
+                        detection: item.fruitName,
+                        mode:
+                          item.mode === "Mode Bisnis" ? "Bisnis" : "Pribadi",
+                        imageUri: item.imageUri || "",
+                        analysis: item.analysis
+                          ? JSON.stringify(item.analysis)
+                          : "",
+                      },
                     })
                   }
                 >
@@ -295,7 +572,7 @@ export default function HistoryScreen() {
                     )}
                   </View>
 
-                  {/* Detail Tengah & Badge Persentase Kanan */}
+                  {/* Detail Tengah & Badge Persentase + Tombol Hapus Kanan */}
                   <View style={styles.cardContent}>
                     <View style={styles.cardTopRow}>
                       <Text style={styles.scannedTitle} numberOfLines={1}>
@@ -324,7 +601,26 @@ export default function HistoryScreen() {
                     </View>
 
                     <Text style={styles.dateTimeText}>{item.dateTime}</Text>
-                    <Text style={styles.modeText}>{item.mode}</Text>
+
+                    <View style={styles.cardBottomRow}>
+                      <Text style={styles.modeText}>{item.mode}</Text>
+
+                      <TouchableOpacity
+                        style={styles.deleteItemButton}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          handleDeleteItem(item);
+                        }}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={16}
+                          color="#C8201B"
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </TouchableOpacity>
               );
@@ -420,6 +716,12 @@ const styles = StyleSheet.create({
     height: 92,
     zIndex: 10,
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
@@ -429,7 +731,20 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 12,
     color: "#9A1B17",
-    marginBottom: 14,
+  },
+  clearAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FCE8E8",
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: 14,
+  },
+  clearAllText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#C8201B",
   },
 
   /* Search Bar */
@@ -602,9 +917,19 @@ const styles = StyleSheet.create({
     color: "#333333",
     marginBottom: 5,
   },
+  cardBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   modeText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#1C1C1E",
+  },
+  deleteItemButton: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: "#FFF2F2",
   },
 });

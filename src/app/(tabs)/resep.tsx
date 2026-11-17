@@ -4,14 +4,13 @@ import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useEffect, useState } from "react";
 import {
-    Alert,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { auth } from "../../firebaseConfig";
 
@@ -32,15 +31,10 @@ export default function ResepScreen() {
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
 
   const handleSelectCategory = (kategori: "makanan" | "minuman") => {
-    const judul =
-      kategori === "makanan" ? "Olahan Makanan Buah" : "Olahan Minuman Buah";
-    const pesan = `Daftar resep ${judul} akan segera tersedia berdasarkan buah yang kamu miliki.`;
-
-    if (Platform.OS === "web") {
-      window.alert(`${judul}\n\n${pesan}`);
-    } else {
-      Alert.alert(judul, pesan);
-    }
+    router.push({
+      pathname: "/resep-list",
+      params: { kategori },
+    });
   };
 
   return (

@@ -1,33 +1,33 @@
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import * as SystemUI from "expo-system-ui";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
+  Image,
+  KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
-  Switch,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 
 // --- IMPORT FIREBASE ---
 import { addDoc, collection } from "firebase/firestore";
-import { db } from "../../firebaseConfig";
+import { auth, db } from "../../firebaseConfig";
 
 // --- PENGATURAN MODEL GEMINI ---
-// Model Gemini 1.5 sudah dimatikan Google, sehingga selalu menghasilkan
-// error 404 "model not found". Model di bawah masih aktif (dicek September 2026).
-// Jika suatu saat Google mematikannya juga, cukup ganti nama model lewat .env
-// tanpa mengubah kode ini:
-//   EXPO_PUBLIC_GEMINI_MODEL=gemini-3.8-flash
-// Setelah mengubah .env, jalankan ulang Expo dengan: npx expo start -c
 const GEMINI_MODELS: string[] = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.5-flash-lite",
-  "gemini-3.8-flash", // model cadangan jika model pertama gagal
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-3.5-flash-lite",
 ].filter((name, index, list) => list.indexOf(name) === index);
 
 const uploadToCloudinary = async (base64String: string) => {
@@ -38,9 +38,7 @@ const uploadToCloudinary = async (base64String: string) => {
     throw new Error("Kredensial Cloudinary belum diatur di .env");
   }
 
-  // Format base64 agar dikenali sebagai gambar oleh Cloudinary
   const fileData = `data:image/jpeg;base64,${base64String}`;
-
   const data = new FormData();
   data.append("file", fileData);
   data.append("upload_preset", uploadPreset);
@@ -59,9 +57,6 @@ const uploadToCloudinary = async (base64String: string) => {
   }
   return result.secure_url;
 };
-
-// Memanggil satu model Gemini dan mengembalikan hasil analisis yang sudah dirapikan.
-// Jika gagal, error yang dilempar membawa properti `status` (kode HTTP).
 
 const callGeminiModel = async (
   model: string,
@@ -86,19 +81,20 @@ const callGeminiModel = async (
           ],
         },
       ],
-      // Meminta Gemini menjawab langsung dalam format JSON sesuai struktur ini
       generationConfig: {
+        temperature: 0.2,
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
           properties: {
+            detectedFruitName: { type: "STRING" },
             freshnessPercentage: { type: "NUMBER" },
             salvageValue: { type: "STRING" },
             shelfLife: { type: "STRING" },
-
             recipe: { type: "STRING" },
           },
           required: [
+            "detectedFruitName",
             "freshnessPercentage",
             "salvageValue",
             "shelfLife",
@@ -128,7 +124,6 @@ const callGeminiModel = async (
   const parts = data?.candidates?.[0]?.content?.parts;
   const textResponse = Array.isArray(parts)
     ? parts
-
         .filter((part: any) => typeof part.text === "string" && !part.thought)
         .map((part: any) => part.text)
         .join("")
@@ -138,16 +133,15 @@ const callGeminiModel = async (
     throw new Error("Gemini tidak mengembalikan jawaban (respons kosong).");
   }
 
-  // Jaga-jaga jika jawaban masih dibungkus tanda markdown ```json
   const cleanJsonString = textResponse
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
   const result = JSON.parse(cleanJsonString);
 
-  // Pastikan semua field ada dan bertipe benar (Firestore menolak nilai undefined)
   const freshness = Number.parseFloat(String(result.freshnessPercentage));
   return {
+    detectedFruitName: String(result.detectedFruitName ?? "").trim(),
     freshnessPercentage: Number.isNaN(freshness)
       ? 0
       : Math.min(100, Math.max(0, Math.round(freshness))),
@@ -160,25 +154,135 @@ const callGeminiModel = async (
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const [isUmkmMode, setIsUmkmMode] = useState(false);
   const router = useRouter();
 
-  // Fungsi simpan ke history lokal (AsyncStorage)
-  // Mengembalikan id entri agar bisa ditautkan ke dokumen Firestore nanti
+  // State foto yang baru dijepret / dipilih
+  const [capturedPhoto, setCapturedPhoto] = useState<{
+    uri: string;
+    base64: string;
+  } | null>(null);
+
+  // State Mode & Input sesuai Figma (Bisnis / Pribadi)
+  const [selectedMode, setSelectedMode] = useState<"Bisnis" | "Pribadi" | null>(
+    null,
+  );
+  const [panjang, setPanjang] = useState("");
+  const [lebar, setLebar] = useState("");
+  const [tinggi, setTinggi] = useState("");
+  const [berat, setBerat] = useState("");
+
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === "web") {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  // 1. Fungsi Jepret Foto dari Kamera
+  const handleCapturePhoto = async () => {
+    if (!cameraRef.current || isCapturing || isProcessing) return;
+    setIsCapturing(true);
+
+    try {
+      if (Platform.OS === "android") {
+        await SystemUI.setBackgroundColorAsync("black");
+      }
+
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.4,
+        shutterSound: false,
+      });
+
+      if (!photo?.base64) {
+        throw new Error("Gagal mendapatkan data gambar dari kamera.");
+      }
+
+      const rawBase64 = photo.base64.includes(",")
+        ? photo.base64.split(",")[1]
+        : photo.base64;
+
+      setCapturedPhoto({
+        uri: photo.uri,
+        base64: rawBase64,
+      });
+    } catch (err: any) {
+      console.error("Capture Error:", err);
+      showAlert(
+        "Gagal Mengambil Foto",
+        "Pastikan kamera aktif atau gunakan tombol Galeri di samping tombol merah.",
+      );
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  // 1B. Alternatif Pilih Foto dari Galeri (Sangat membantu di Web/Laptop atau stok foto)
+  const handlePickFromGallery = async () => {
+    if (isCapturing || isProcessing) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          const rawBase64 = asset.base64.includes(",")
+            ? asset.base64.split(",")[1]
+            : asset.base64;
+
+          setCapturedPhoto({
+            uri: asset.uri,
+            base64: rawBase64,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Gallery Error:", err);
+      showAlert("Gagal", "Tidak dapat membuka galeri gambar.");
+    }
+  };
+
+  // Reset foto ("Ulangi Gambar")
+  const handleRetake = () => {
+    setCapturedPhoto(null);
+    setSelectedMode(null);
+    setPanjang("");
+    setLebar("");
+    setTinggi("");
+    setBerat("");
+  };
+
+  // Simpan ke history lokal (AsyncStorage)
   const saveToHistory = async (photoUri: string, detectionResult: any) => {
     const entryId = Date.now().toString();
     try {
       const newEntry = {
         id: entryId,
-        date: new Date().toLocaleString(),
+        userId: auth.currentUser?.uid || "guest",
+        date: new Date().toLocaleString("id-ID", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         image: photoUri,
+        mode: selectedMode || "Pribadi",
         result: detectionResult,
       };
 
       const existingHistory = await AsyncStorage.getItem("@freshia_history");
-      let historyArray = existingHistory ? JSON.parse(existingHistory) : [];
+      const historyArray = existingHistory ? JSON.parse(existingHistory) : [];
       historyArray.unshift(newEntry);
       await AsyncStorage.setItem(
         "@freshia_history",
@@ -190,8 +294,7 @@ export default function ScannerScreen() {
     return entryId;
   };
 
-  // Menyimpan id dokumen Firestore ke entri riwayat lokal,
-  // supaya halaman Riwayat bisa menghapus dokumen yang sama
+  // Tautkan ID Firestore ke entri lokal
   const linkFirestoreId = async (entryId: string, firestoreId: string) => {
     try {
       const stored = await AsyncStorage.getItem("@freshia_history");
@@ -205,6 +308,7 @@ export default function ScannerScreen() {
     }
   };
 
+  // Panggil Gemini API dengan rubrik penilaian visual buah yang ketat & akurat
   const analyzeWithGemini = async (
     base64Image: string,
     roboflowLabel: string,
@@ -214,21 +318,38 @@ export default function ScannerScreen() {
       throw new Error("Gemini API Key belum diatur di .env");
     }
 
-    // Menggunakan istilah baru yang lebih profesional
-    const mode = isUmkmMode
-      ? "Komersial (stok jumlah besar)"
-      : "Personal (stok kecil)";
+    const detailParameter =
+      selectedMode === "Bisnis"
+        ? `Mode Bisnis (stok komersial/keranjang). Dimensi wadah: Panjang ${panjang || "-"} cm, Lebar ${lebar || "-"} cm, Tinggi ${tinggi || "-"} cm.`
+        : `Mode Pribadi (konsumsi rumah tangga). Estimasi berat buah: ${berat || "-"} gram/kg.`;
 
-    const prompt = `Sistem visi awal mendeteksi gambar ini sebagai: ${roboflowLabel}. 
-    Aplikasi saat ini berjalan pada mode: ${mode}.
-    Tolong analisis buah ini dan kembalikan response MURNI dalam format JSON (tanpa markdown backticks) dengan struktur berikut:
-    {
-      "freshnessPercentage": angka (0-100),
-      "salvageValue": "string estimasi rupiah",
-      "shelfLife": "string prediksi hari",
+    const prompt = `Kamu adalah ahli agronomi dan quality control buah segar tingkat profesional untuk aplikasi Freshia.
+Tugasmu adalah memeriksa gambar secara visual dan mengabaikan label deteksi awal jika keliru.
 
-      "recipe": "string saran resep zero-waste singkat"
-    }`;
+Informasi tambahan dari sistem:
+- Deteksi awal Roboflow: "${roboflowLabel}" (gunakan hanya sebagai referensi, prioritaskan analisis visual foto asli!).
+- Parameter pengguna: ${detailParameter}
+
+ATURAN PENILAIAN WAJIB:
+1. VALIDASI OBJEK BUKAN BUAH:
+   - Periksa apakah di dalam foto benar-benar terdapat buah asli (segar, matang, maupun busuk).
+   - Jika foto berisi benda mati, tembok, wajah, layar, teks, atau bukan buah sama sekali: wajib kembalikan "detectedFruitName": "Bukan Buah", "freshnessPercentage": 0, "salvageValue": "Rp0", "shelfLife": "0 hari", dan "recipe": "Tidak ada buah yang terdeteksi dalam gambar.".
+
+2. IDENTIFIKASI NAMA BUAH SPESIFIK:
+   - Jika gambar adalah buah, tulis nama spesifik buah dalam Bahasa Indonesia yang rapi (contoh: "Pisang", "Pisang Cavendish", "Apel Merah", "Stroberi", "Mangga", "Jeruk"). Jangan menulis "Buah" saja jika jenis buahnya terlihat jelas.
+
+3. RUBRIK PENILAIAN KESEGARAN VISUAL (0 - 100):
+   - 85% - 100% (Sangat Segar): Kulit mulus, warna cerah alami (kuning cerah/hijau kekuningan pada pisang, merah cerah pada apel/stroberi), tangkai masih kokoh/hijau, tidak ada jamur atau memar berair.
+   - 70% - 84% (Segar & Matang Optimal): Buah matang siap makan. CATATAN KHUSUS PISANG: Bintik-bintik cokelat kecil alami (sugar spots) pada pisang matang yang kulitnya masih utuh dan kencang BUKANLAH busuk, beri nilai antara 75% - 85%.
+   - 45% - 69% (Cukup Segar / Mulai Layu): Kulit mulai keriput, warna kusam, atau terdapat memar ringan lokal tanpa jamur.
+   - 1% - 44% (Hampir Busuk / Busuk): Kulit menghitam meluas, lembek berair, berjamur putih/hijau, atau membusuk.
+
+4. KALKULASI EKONOMI & MASA SIMPAN:
+   - "salvageValue": Jika Mode Bisnis, hitung estimasi harga jual wajar & estimasi keuntungan dalam format "Rp25.000 | Rp8.000" berdasarkan volume wadah (P x L x T) atau jumlah buah di foto. Jika Mode Pribadi, tulis estimasi nilai ekonomisnya seperti "Rp15.000".
+   - "shelfLife": Prediksi sisa hari layak konsumsi/jual (contoh: "4 - 5 hari lagi" atau "3 hari lagi").
+   - "recipe": Berikan 2 ide olahan resep zero-waste singkat sesuai jenis buahnya dalam Bahasa Indonesia dengan format "Nama Resep 1: deskripsi singkat\nNama Resep 2: deskripsi singkat".
+
+Kembalikan respons MURNI dalam format JSON sesuai schema tanpa markdown backticks.`;
 
     let lastError: any = null;
     for (const model of GEMINI_MODELS) {
@@ -248,34 +369,31 @@ export default function ScannerScreen() {
     throw lastError;
   };
 
-  const takeAndAnalyzePhoto = async () => {
-    if (!cameraRef.current) return;
+  // 2. Proses Analisis AI & Penyimpanan ke AsyncStorage + Cloudinary + Firestore
+  const handleAnalyzePhoto = async () => {
+    if (!capturedPhoto) {
+      showAlert("Belum Ada Foto", "Silakan jepret atau pilih foto buah dulu.");
+      return;
+    }
+    if (!selectedMode) {
+      showAlert(
+        "Pilih Mode",
+        "Pilih mode 'Bisnis' atau 'Pribadi' terlebih dahulu sebelum menganalisis.",
+      );
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      if (Platform.OS === "android") {
-        await SystemUI.setBackgroundColorAsync("black");
-      }
+      const rawBase64 = capturedPhoto.base64;
 
-      // 1. Ambil Foto
-      const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.3,
-        shutterSound: false,
-      });
-
-      // Normalisasi base64: di web hasilnya berupa data URI lengkap
-      // ("data:image/png;base64,..."), sedangkan API butuh base64 murni
-      const rawBase64: string = photo.base64.includes(",")
-        ? photo.base64.split(",")[1]
-        : photo.base64;
-
-      // 2. ROBOFLOW DETECTION
+      // A. ROBOFLOW DETECTION
       const apiKey = process.env.EXPO_PUBLIC_ROBOFLOW_API_KEY;
       const modelId = process.env.EXPO_PUBLIC_ROBOFLOW_MODEL_ID;
       const apiUrl = `https://detect.roboflow.com/${modelId}?api_key=${apiKey}`;
 
-      let rawClass = "Unknown";
+      let rawClass = "Buah";
       let confidenceScore = "0";
 
       if (apiKey && modelId) {
@@ -292,158 +410,673 @@ export default function ScannerScreen() {
               roboData.predictions[0].confidence * 100
             ).toFixed(1);
           }
-        } catch (roboErr) {
-          rawClass = "Buah (Deteksi awal dilewati)";
+        } catch {
+          rawClass = "Buah";
         }
       }
 
-      // 3. GEMINI ANALYSIS
+      // B. GEMINI ANALYSIS
       let geminiAnalysis = null;
       try {
         geminiAnalysis = await analyzeWithGemini(rawBase64, rawClass);
+        // Gunakan nama buah spesifik dari Gemini jika Roboflow hanya mengembalikan label umum/keliru
+        if (
+          geminiAnalysis.detectedFruitName &&
+          geminiAnalysis.detectedFruitName.toLowerCase() !== "bukan buah"
+        ) {
+          rawClass = geminiAnalysis.detectedFruitName;
+        } else if (
+          geminiAnalysis.detectedFruitName?.toLowerCase() === "bukan buah"
+        ) {
+          rawClass = "Buah";
+        }
       } catch (err: any) {
-        console.warn("Gemini Error: ", err.message);
+        console.warn("Gemini Error:", err.message);
         geminiAnalysis = {
+          detectedFruitName: "Bukan Buah",
           freshnessPercentage: 0,
-          salvageValue: "Rp0 (Error Gemini)",
+          salvageValue: "Rp0 (Error AI)",
           shelfLife: "0 hari",
-          recipe: "Analisis AI gagal. Periksa koneksi internet.",
+          recipe: "Analisis AI gagal. Periksa API Key atau koneksi internet.",
         };
       }
 
-      // 4. SIMPAN KE HISTORY LOKAL (AsyncStorage)
-      const entryId = await saveToHistory(photo.uri, {
+      // C. SIMPAN KE HISTORY LOKAL (AsyncStorage)
+      const entryId = await saveToHistory(capturedPhoto.uri, {
         label: rawClass,
         confidence: confidenceScore,
-        analysis: geminiAnalysis, // <--- TAMBAHKAN BARIS INI
+        analysis: geminiAnalysis,
       });
 
-      // 5. LANGSUNG PINDAH KE HALAMAN HASIL! (UX Tidak Tertahan)
+      // D. LANGSUNG PINDAH KE HALAMAN RESULT
       router.push({
         pathname: "/result",
         params: {
           detection: rawClass,
-
+          mode: selectedMode,
+          imageUri: capturedPhoto.uri,
           analysis: JSON.stringify(geminiAnalysis),
         },
       });
 
-      // 6. JALANKAN UPLOAD CLOUD DI LATAR BELAKANG (Fire-and-forget)
-      // Tanpa perintah "await" di depannya, fungsi ini tidak akan memblokir aplikasi
+      // E. UPLOAD CLOUDINARY & SIMPAN PERMANEN KE FIRESTORE (Fire-and-forget)
+      const currentUserId = auth.currentUser?.uid || null;
+      const metadataInput =
+        selectedMode === "Bisnis" ? { panjang, lebar, tinggi } : { berat };
+
       (async () => {
         try {
-          const cloudinaryUrl = await uploadToCloudinary(rawBase64);
+          let finalImageUrl = capturedPhoto.uri;
+          try {
+            finalImageUrl = await uploadToCloudinary(rawBase64);
+          } catch (cloudErr) {
+            console.warn(
+              "Cloudinary dilewati (cek .env), lanjut simpan metadata ke Firestore:",
+              cloudErr,
+            );
+          }
+
           const docRef = await addDoc(collection(db, "scan_history"), {
-            imageUrl: cloudinaryUrl,
+            user_id: currentUserId,
+            imageUrl: finalImageUrl,
             label: rawClass,
             confidence: confidenceScore,
             analysis: geminiAnalysis,
-            mode: isUmkmMode ? "Komersial" : "Personal",
+            mode: selectedMode,
+            parameters: metadataInput,
             timestamp: new Date(),
           });
+
           await linkFirestoreId(entryId, docRef.id);
-          console.log("Background Task: Berhasil disimpan ke Firebase!");
+          console.log("Berhasil tersimpan ke Firestore ID:", docRef.id);
         } catch (dbError) {
-          console.warn("Background Task Gagal: ", dbError);
+          console.warn("Gagal menyimpan ke Firestore:", dbError);
         }
       })();
     } catch (error) {
       console.error(error);
-      Alert.alert("Gagal", "Koneksi terputus saat mengambil foto.");
+      showAlert("Gagal", "Terjadi kesalahan saat memproses gambar.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  if (!permission) return <View style={styles.container} />;
+  if (!permission) return <View style={styles.root} />;
 
   if (!permission.granted) {
     return (
-      <View style={styles.containerCentered}>
-        <Text style={styles.textInfo}>Freshia butuh izin kamera.</Text>
-        <Button
+      <View style={styles.permissionContainer}>
+        <Ionicons name="camera-outline" size={54} color="#C8201B" />
+        <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
+        <Text style={styles.permissionDesc}>
+          Freshia memerlukan akses kamera untuk memindai tingkat kesegaran buah
+          Anda.
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionButton}
           onPress={requestPermission}
-          title="Berikan Izin"
-          color="#2e7d32"
-        />
+          activeOpacity={0.85}
+        >
+          <Text style={styles.permissionButtonText}>Izinkan Kamera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.galleryFallbackBtn}
+          onPress={handlePickFromGallery}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.galleryFallbackText}>
+            Atau Pilih Foto dari Galeri
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Text style={styles.modeText}>
-          Mode: {isUmkmMode ? "UMKM" : "Rumah Tangga"}
-        </Text>
-        <Switch
-          value={isUmkmMode}
-          onValueChange={setIsUmkmMode}
-          trackColor={{ false: "#767577", true: "#81b0ff" }}
-          thumbColor={isUmkmMode ? "#2e7d32" : "#f4f3f4"}
-        />
-      </View>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {/* BAGIAN ATAS: LIVE CAMERA PREVIEW */}
+      <View style={styles.cameraSection}>
+        <CameraView style={styles.camera} facing="back" ref={cameraRef} />
 
-      <CameraView style={styles.camera} facing="back" ref={cameraRef} />
+        {/* Overlay Header & Panduan (pointerEvents="box-none" agar tidak memblokir klik) */}
+        <View style={styles.cameraOverlay} pointerEvents="box-none">
+          {/* Top Navigation Bar */}
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.iconCircleBtn}
+              onPress={() => router.push("/(tabs)")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
 
-      <View style={styles.overlay}>
-        <View style={styles.scanArea} />
-      </View>
-
-      <View style={styles.buttonContainer}>
-        {isProcessing ? (
-          <View style={styles.loadingWrapper}>
-            <ActivityIndicator size="large" color="#00E676" />
-            <Text style={styles.loadingText}>
-              Menganalisis dan Menyimpan...
-            </Text>
+            <TouchableOpacity
+              style={styles.iconCircleBtn}
+              onPress={() =>
+                showAlert(
+                  "Panduan Scan Buah",
+                  "1. Arahkan kamera ke buah atau pilih foto dari galeri.\n2. Tekan tombol merah di tengah untuk menjepret.\n3. Pilih mode Bisnis atau Pribadi lalu tekan Analisis.",
+                )
+              }
+              activeOpacity={0.8}
+            >
+              <Ionicons name="help-circle-outline" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <Button
-            title="✨ Pindai AI"
-            color="#2e7d32"
-            onPress={takeAndAnalyzePhoto}
-          />
-        )}
+
+          {/* Instruksi Tengah Kamera */}
+          <View style={styles.centerGuide} pointerEvents="none">
+            <Text style={styles.scanTitle}>Scan Buah</Text>
+            <Text style={styles.scanSubtitle}>
+              Arahkan kamera pada buah Anda
+            </Text>
+            <View style={styles.viewfinderFrame}>
+              <Ionicons
+                name="camera-outline"
+                size={54}
+                color="rgba(255,255,255,0.9)"
+              />
+            </View>
+          </View>
+        </View>
       </View>
-    </View>
+
+      {/* BAGIAN BAWAH: PANEL PUTIH MELENGKUNG (BOTTOM SHEET) */}
+      <View style={styles.bottomSheet}>
+        {/* Tombol Bulat Merah Utama di Tengah Perbatasan (Jepret Foto) */}
+        <TouchableOpacity
+          style={styles.shutterButton}
+          onPress={handleCapturePhoto}
+          disabled={isCapturing || isProcessing}
+          activeOpacity={0.85}
+        >
+          {isCapturing ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <MaterialCommunityIcons
+              name="line-scan"
+              size={30}
+              color="#FFFFFF"
+            />
+          )}
+        </TouchableOpacity>
+
+        {/* Tombol Kecil Pilih dari Galeri di Kiri Atas Panel */}
+        <TouchableOpacity
+          style={styles.galleryMiniBtn}
+          onPress={handlePickFromGallery}
+          disabled={isCapturing || isProcessing}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="images-outline" size={16} color="#9A1B17" />
+          <Text style={styles.galleryMiniText}>Galeri</Text>
+        </TouchableOpacity>
+
+        {/* Tombol Ulangi Gambar di Kanan Atas Panel */}
+        {capturedPhoto && (
+          <TouchableOpacity
+            style={styles.retakeBtn}
+            onPress={handleRetake}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retakeText}>Ulangi Gambar</Text>
+            <Ionicons name="refresh" size={15} color="#1C1C1E" />
+          </TouchableOpacity>
+        )}
+
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Kotak Pratinjau Foto Hasil Jepretan */}
+          {capturedPhoto ? (
+            <View style={styles.previewWrapper}>
+              <Image
+                source={{ uri: capturedPhoto.uri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.emptyPreviewBox}
+              onPress={handleCapturePhoto}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="camera" size={28} color="#9A1B17" />
+              <Text style={styles.emptyPreviewText}>
+                Tekan tombol merah di atas untuk menjepret buah, atau pilih dari
+                Galeri
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Pilihan Mode: Bisnis / Pribadi */}
+          <Text style={styles.modeQuestion}>Mode apa yang ingin digunakan</Text>
+
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[
+                styles.modePill,
+                selectedMode === "Bisnis" && styles.modePillActive,
+              ]}
+              onPress={() => setSelectedMode("Bisnis")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.modePillText,
+                  selectedMode === "Bisnis" && styles.modePillTextActive,
+                ]}
+              >
+                Bisnis
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modePill,
+                selectedMode === "Pribadi" && styles.modePillActive,
+              ]}
+              onPress={() => setSelectedMode("Pribadi")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.modePillText,
+                  selectedMode === "Pribadi" && styles.modePillTextActive,
+                ]}
+              >
+                Pribadi
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Input Dinamis Berdasarkan Mode Sesuai Figma */}
+          {selectedMode === "Bisnis" && (
+            <View style={styles.dimensionRow}>
+              <View style={styles.dimensionCol}>
+                <Text style={styles.inputLabel}>Panjang</Text>
+                <TextInput
+                  style={styles.dimensionInput}
+                  placeholder="cm"
+                  placeholderTextColor="#A0A0A0"
+                  keyboardType="numeric"
+                  value={panjang}
+                  onChangeText={setPanjang}
+                />
+              </View>
+
+              <View style={styles.dimensionCol}>
+                <Text style={styles.inputLabel}>Lebar</Text>
+                <TextInput
+                  style={styles.dimensionInput}
+                  placeholder="cm"
+                  placeholderTextColor="#A0A0A0"
+                  keyboardType="numeric"
+                  value={lebar}
+                  onChangeText={setLebar}
+                />
+              </View>
+
+              <View style={styles.dimensionCol}>
+                <Text style={styles.inputLabel}>Tinggi</Text>
+                <TextInput
+                  style={styles.dimensionInput}
+                  placeholder="cm"
+                  placeholderTextColor="#A0A0A0"
+                  keyboardType="numeric"
+                  value={tinggi}
+                  onChangeText={setTinggi}
+                />
+              </View>
+            </View>
+          )}
+
+          {selectedMode === "Pribadi" && (
+            <View style={styles.weightContainer}>
+              <Text style={styles.inputLabel}>Berat</Text>
+              <TextInput
+                style={styles.weightInput}
+                placeholder="Contoh: 500 gram / 1 kg"
+                placeholderTextColor="#A0A0A0"
+                value={berat}
+                onChangeText={setBerat}
+              />
+            </View>
+          )}
+
+          {/* Tombol Eksekusi Analisis AI */}
+          {capturedPhoto && selectedMode && (
+            <TouchableOpacity
+              style={styles.analyzeButton}
+              onPress={handleAnalyzePhoto}
+              disabled={isProcessing}
+              activeOpacity={0.85}
+            >
+              {isProcessing ? (
+                <View style={styles.processingRow}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={styles.analyzeButtonText}>
+                    Menganalisis Buah...
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.analyzeButtonText}>
+                  Analisis Kesegaran Buah
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  containerCentered: {
+  root: {
     flex: 1,
+    backgroundColor: "#1C1C1E",
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 28,
   },
-  textInfo: { textAlign: "center", marginBottom: 20 },
-  topBar: {
-    flexDirection: "row",
+  permissionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#9A1B17",
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  permissionDesc: {
+    fontSize: 13.5,
+    color: "#555555",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  permissionButton: {
+    backgroundColor: "#C8201B",
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 24,
+    marginBottom: 12,
+  },
+  permissionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  galleryFallbackBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  galleryFallbackText: {
+    color: "#9A1B17",
+    fontSize: 13,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
 
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 15,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    position: "absolute",
-    top: 0,
+  /* Kamera Atas */
+  cameraSection: {
+    height: "47%",
     width: "100%",
-    zIndex: 10,
+    position: "relative",
+    backgroundColor: "#000000",
   },
-  modeText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  camera: { flex: 1 },
-  overlay: {
+  camera: {
+    flex: 1,
+  },
+  cameraOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+    paddingTop: Platform.OS === "ios" ? 50 : 32,
+    paddingHorizontal: 18,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  iconCircleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
   },
-  scanArea: { width: 250, height: 250, borderWidth: 2, borderColor: "#00E676" },
-  buttonContainer: { position: "absolute", bottom: 40, alignSelf: "center" },
-  loadingWrapper: { alignItems: "center" },
-  loadingText: { color: "#00E676", marginTop: 10, fontWeight: "bold" },
+  centerGuide: {
+    alignItems: "center",
+    marginTop: 10,
+  },
+  scanTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  scanSubtitle: {
+    fontSize: 12.5,
+    color: "#F2F2F7",
+    marginBottom: 18,
+  },
+  viewfinderFrame: {
+    width: 110,
+    height: 96,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  /* Bottom Sheet Putih */
+  bottomSheet: {
+    flex: 1,
+    backgroundColor: "#FFFBFB",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -24,
+    paddingTop: 36,
+    paddingHorizontal: 20,
+    position: "relative",
+  },
+  shutterButton: {
+    position: "absolute",
+    top: -32,
+    alignSelf: "center",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#C8201B",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+    elevation: 8,
+    shadowColor: "#9A1B17",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  galleryMiniBtn: {
+    position: "absolute",
+    top: 12,
+    left: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FCE8E8",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    zIndex: 15,
+  },
+  galleryMiniText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#9A1B17",
+  },
+  retakeBtn: {
+    position: "absolute",
+    top: 12,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    zIndex: 15,
+  },
+  retakeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#1C1C1E",
+  },
+  sheetScroll: {
+    flex: 1,
+    marginTop: 6,
+  },
+  sheetScrollContent: {
+    paddingBottom: 115,
+  },
+  previewWrapper: {
+    width: "100%",
+    height: 155,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#F2EAEA",
+    marginBottom: 16,
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  emptyPreviewBox: {
+    width: "100%",
+    height: 140,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#E0CACA",
+    backgroundColor: "#FCE8E8",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  emptyPreviewText: {
+    fontSize: 12,
+    color: "#9A1B17",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 17,
+  },
+
+  /* Mode Bisnis / Pribadi */
+  modeQuestion: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#1C1C1E",
+    marginBottom: 10,
+  },
+  modeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
+  modePill: {
+    flex: 1,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "#E5DADA",
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modePillActive: {
+    borderColor: "#9A1B17",
+    backgroundColor: "#FFF5F5",
+  },
+  modePillText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#A0A0A0",
+  },
+  modePillTextActive: {
+    color: "#9A1B17",
+    fontWeight: "700",
+  },
+
+  /* Input Dimensi & Berat */
+  dimensionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  dimensionCol: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1C1C1E",
+    marginBottom: 6,
+  },
+  dimensionInput: {
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "#E5DADA",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    fontSize: 12.5,
+    color: "#1C1C1E",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+  },
+  weightContainer: {
+    marginBottom: 16,
+  },
+  weightInput: {
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E5DADA",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    fontSize: 12.5,
+    color: "#1C1C1E",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+  },
+
+  /* Tombol Analisis */
+  analyzeButton: {
+    backgroundColor: "#C8201B",
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  processingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  analyzeButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
 });
