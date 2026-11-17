@@ -1,8 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Image,
     Platform,
     ScrollView,
@@ -11,6 +12,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { auth } from "../firebaseConfig";
+import { saveRecipe, isRecipeSaved, deleteRecipe } from "../services/firestoreService";
 
 export interface RecipeDetailItem {
   id: string;
@@ -64,6 +67,64 @@ export default function ResepDetailScreen() {
   const [checkedIngredients, setCheckedIngredients] = useState<
     Record<number, boolean>
   >({});
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedDocId, setSavedDocId] = useState<string | null>(null);
+  const [savingRecipe, setSavingRecipe] = useState(false);
+
+  // Check if recipe is already saved when screen loads
+  useEffect(() => {
+    const checkSaved = async () => {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return;
+      try {
+        const result = await isRecipeSaved(userId, recipe.title, recipe.fruitName);
+        if (result.saved) {
+          setIsSaved(true);
+          setSavedDocId(result.docId || null);
+        }
+      } catch {}
+    };
+    checkSaved();
+  }, [recipe.title, recipe.fruitName]);
+
+  const handleToggleSaveRecipe = async () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      if (Platform.OS === "web") {
+        window.alert("Silakan login terlebih dahulu untuk menyimpan resep.");
+      } else {
+        Alert.alert("Login Diperlukan", "Silakan login terlebih dahulu untuk menyimpan resep.");
+      }
+      return;
+    }
+    setSavingRecipe(true);
+    try {
+      if (isSaved && savedDocId) {
+        await deleteRecipe(savedDocId);
+        setIsSaved(false);
+        setSavedDocId(null);
+      } else {
+        const docId = await saveRecipe({
+          userId,
+          title: recipe.title,
+          subtitle: recipe.subtitle,
+          fruitName: recipe.fruitName,
+          prepTime: recipe.prepTime,
+          difficulty: recipe.difficulty,
+          calories: recipe.calories,
+          ingredients: recipe.ingredients,
+          steps: recipe.steps,
+          imageUri: recipe.imageUri,
+        });
+        setIsSaved(true);
+        setSavedDocId(docId);
+      }
+    } catch (err) {
+      console.warn("Gagal menyimpan resep:", err);
+    } finally {
+      setSavingRecipe(false);
+    }
+  };
 
   const toggleIngredient = (idx: number) => {
     setCheckedIngredients((prev) => ({
@@ -88,7 +149,18 @@ export default function ResepDetailScreen() {
 
         <Text style={styles.headerTitle}>Detail Resep</Text>
 
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleToggleSaveRecipe}
+          disabled={savingRecipe}
+          activeOpacity={0.75}
+        >
+          <Ionicons
+            name={isSaved ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color="#FFFFFF"
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Body Putih Melengkung */}
@@ -248,6 +320,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
     textAlign: "center",
+  },
+  saveButton: {
+    padding: 6,
   },
   headerSpacer: {
     width: 38,

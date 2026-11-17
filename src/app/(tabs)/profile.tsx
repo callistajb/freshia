@@ -24,9 +24,11 @@ import {
   Switch,
   Text,
   TouchableOpacity,
+  TextInput,
   View,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
+import { submitFeedback, ensureCollectionsInitialized } from "../../services/firestoreService";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -37,6 +39,10 @@ export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
 
   // Statistik nyata pengguna
   const [totalScans, setTotalScans] = useState(0);
@@ -65,6 +71,7 @@ export default function ProfileScreen() {
     }
 
     const currentUid = auth.currentUser?.uid;
+    if (currentUid) { ensureCollectionsInitialized(currentUid).catch(() => {}); }
 
     // Muat foto profil kustom (Base64 dari cache lokal / Firestore)
     if (currentUid) {
@@ -195,6 +202,50 @@ export default function ProfileScreen() {
   const isGoogleProvider = user?.providerData?.some(
     (p) => p.providerId === "google.com",
   );
+
+  const handleSendFeedback = () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      if (Platform.OS === "web") {
+        window.alert("Silakan login terlebih dahulu.");
+      } else {
+        Alert.alert("Login Diperlukan", "Silakan login terlebih dahulu untuk memberi feedback.");
+      }
+      return;
+    }
+    setFeedbackModalVisible(true);
+  };
+
+  const handleSubmitFeedback = async () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId || !feedbackText.trim()) return;
+    setSendingFeedback(true);
+    try {
+      await submitFeedback({
+        userId,
+        rating: feedbackRating,
+        comment: feedbackText.trim(),
+        category: "general",
+        appVersion: "1.0.0",
+      });
+      setFeedbackModalVisible(false);
+      setFeedbackText("");
+      setFeedbackRating(5);
+      if (Platform.OS === "web") {
+        window.alert("Terima kasih atas feedback Anda!");
+      } else {
+        Alert.alert("Terima Kasih", "Feedback berhasil dikirim!");
+      }
+    } catch {
+      if (Platform.OS === "web") {
+        window.alert("Gagal mengirim feedback.");
+      } else {
+        Alert.alert("Error", "Gagal mengirim feedback. Coba lagi nanti.");
+      }
+    } finally {
+      setSendingFeedback(false);
+    }
+  };
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
@@ -472,6 +523,28 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Feedback Button */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.75}
+            onPress={handleSendFeedback}
+          >
+            <View style={styles.menuIconCircle}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={24}
+                color="#9A1B17"
+              />
+            </View>
+            <View style={styles.menuTextGroup}>
+              <Text style={styles.menuText}>Beri Feedback</Text>
+              <Text style={styles.menuSubText}>
+                Bantu kami meningkatkan Freshia
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9A1B17" />
+          </TouchableOpacity>
+
           {/* Zona Keamanan & Hapus Akun */}
           <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
             Keamanan & Data
@@ -600,6 +673,91 @@ export default function ProfileScreen() {
                 style={styles.cancelButton}
                 onPress={() => setDeleteModalVisible(false)}
                 disabled={deletingAccount}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.cancelButtonText}>Batal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Pop-up Modal Feedback */}
+      <Modal
+        visible={feedbackModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!sendingFeedback) {
+            setFeedbackModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setFeedbackModalVisible(false)}
+              disabled={sendingFeedback}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={22} color="#333333" />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>Feedback Freshia</Text>
+            <Text style={styles.modalSubtitle}>
+              Beri rating dan tulis komentar untuk membantu kami meningkatkan
+              aplikasi.
+            </Text>
+
+            {/* Star Rating */}
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setFeedbackRating(star)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={star <= feedbackRating ? "star" : "star-outline"}
+                    size={30}
+                    color={star <= feedbackRating ? "#FFB800" : "#CCC"}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.feedbackInput}
+              placeholder="Tulis komentar atau saran..."
+              placeholderTextColor="#999"
+              multiline
+              numberOfLines={4}
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              textAlignVertical="top"
+            />
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[
+                  styles.yesButton,
+                  (sendingFeedback || !feedbackText.trim()) && { opacity: 0.7 },
+                ]}
+                onPress={handleSubmitFeedback}
+                disabled={sendingFeedback || !feedbackText.trim()}
+                activeOpacity={0.85}
+              >
+                {sendingFeedback ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.yesButtonText}>Kirim</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setFeedbackModalVisible(false)}
+                disabled={sendingFeedback}
                 activeOpacity={0.85}
               >
                 <Text style={styles.cancelButtonText}>Batal</Text>
@@ -797,6 +955,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#9A1B17",
+  },
+  ratingRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  feedbackInput: {
+    width: "100%",
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: "#E0D6D6",
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 20,
+    backgroundColor: "#FAFAFA",
   },
   versionText: {
     textAlign: "center",

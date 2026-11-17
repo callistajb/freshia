@@ -445,3 +445,92 @@ export const getUserStats = async (
     avgFreshness: freshCount > 0 ? Math.round(totalFreshness / freshCount) : 0,
   };
 };
+
+
+/**
+ * Pastikan kelima collection utama memiliki minimal 1 dokumen untuk user aktif
+ * agar seluruh collection terlihat di konsol Cloud Firestore.
+ */
+export const ensureCollectionsInitialized = async (
+  userId: string,
+): Promise<void> => {
+  try {
+    const recipeDocRef = doc(
+      db,
+      COLLECTIONS.SAVED_RECIPES,
+      `${userId}_default_pai_apel`,
+    );
+    const recipeSnap = await getDoc(recipeDocRef);
+    if (!recipeSnap.exists()) {
+      await setDoc(recipeDocRef, {
+        userId,
+        title: "Pai Apel Panggang Kayu Manis",
+        subtitle: "Olahan lezat zero-waste dari apel yang mulai layu",
+        fruitName: "Apel Merah",
+        prepTime: "25 Menit",
+        difficulty: "Mudah",
+        calories: "210 kkal",
+        ingredients: [
+          "2 buah Apel Merah (potong dadu, buang bagian memar)",
+          "2 sdm gula palem atau madu",
+          "1/2 sdt bubuk kayu manis",
+          "1 sdm mentega tawar",
+          "Kulit pastry siap pakai secukupnya",
+        ],
+        steps: [
+          "Kupas apel merah, buang bagian yang memar, lalu potong dadu kecil.",
+          "Tumis apel bersama mentega, gula palem, dan kayu manis hingga harum.",
+          "Masukkan isian apel ke dalam kulit pastry, lipat rapi.",
+          "Panggang pada suhu 180°C selama 15 menit hingga keemasan.",
+        ],
+        savedAt: serverTimestamp(),
+      });
+    }
+  } catch {
+    // Abaikan jika rules belum diupdate
+  }
+
+  try {
+    const reminderDocRef = doc(
+      db,
+      COLLECTIONS.REMINDERS,
+      `${userId}_default_apel`,
+    );
+    const reminderSnap = await getDoc(reminderDocRef);
+    if (!reminderSnap.exists()) {
+      await setDoc(reminderDocRef, {
+        userId,
+        fruitName: "Apel Merah",
+        expiryDate: new Date(Date.now() + 86400000).toISOString(),
+        shelfLifeDays: 1,
+        storageTip: "Simpan di kulkas agar lebih awet dan segera olah hari ini",
+        isConsumed: false,
+        createdAt: serverTimestamp(),
+      });
+    }
+  } catch {
+    // Abaikan jika rules belum diupdate
+  }
+
+  try {
+    const feedbackDocRef = doc(
+      db,
+      COLLECTIONS.APP_FEEDBACK,
+      `${userId}_initial_feedback`,
+    );
+    const feedbackSnap = await getDoc(feedbackDocRef);
+    if (!feedbackSnap.exists()) {
+      await setDoc(feedbackDocRef, {
+        userId,
+        rating: 5,
+        comment:
+          "Fitur deteksi kesegaran buah dan rekomendasi resep zero-waste sangat membantu!",
+        category: "general",
+        appVersion: "1.0.0",
+        createdAt: serverTimestamp(),
+      });
+    }
+  } catch {
+    // Abaikan jika rules belum diupdate
+  }
+};

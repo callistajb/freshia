@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Profil Pengguna (users)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 2. Riwayat Pemindaian Buah AI (scan_history)
+    match /scan_history/{scanId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 3. Resep Favorit Tersimpan (saved_recipes)
+    match /saved_recipes/{recipeId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 4. Pengingat Masa Simpan Buah (reminders)
+    match /reminders/{reminderId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 5. Umpan Balik & Rating Pengguna (app_feedback)
+    match /app_feedback/{feedbackId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

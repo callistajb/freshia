@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   Image,
@@ -232,6 +232,26 @@ export default function ReminderScreen() {
     items.sort((a, b) => a.remainingDaysNum - b.remainingDaysNum);
     setBrokenImageIds({});
     setReminders(items);
+
+    // Auto-save reminders ke Firestore collection "reminders" (deduplicated by deterministic ID)
+    const userId = auth.currentUser?.uid;
+    if (userId && items.length > 0) {
+      items.slice(0, 10).forEach((item) => {
+        // Use deterministic doc ID to prevent duplicates
+        const docId = `{userId}_{item.id}`;
+        const reminderRef = doc(db, "reminders", docId);
+        setDoc(reminderRef, {
+          userId,
+          fruitName: item.name,
+          expiryDate: new Date(Date.now() + item.remainingDaysNum * 86400000).toISOString(),
+          shelfLifeDays: item.remainingDaysNum,
+          storageTip: item.storageTip,
+          isConsumed: false,
+          imageUrl: item.imageUri || null,
+          createdAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      });
+    }
   }, []);
 
   useFocusEffect(
