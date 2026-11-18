@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
+import { resolveUserAvatar } from "../../utils/avatarSync";
 import { submitFeedback, ensureCollectionsInitialized } from "../../services/firestoreService";
 
 export default function ProfileScreen() {
@@ -71,6 +72,7 @@ export default function ProfileScreen() {
     }
 
     const currentUid = auth.currentUser?.uid;
+    const resolvedAv = await resolveUserAvatar(auth.currentUser); if (resolvedAv) { setCustomPhoto(resolvedAv); setImgError(false); }
     if (currentUid) { ensureCollectionsInitialized(currentUid).catch(() => {}); }
 
     // Muat foto profil kustom (Base64 dari cache lokal / Firestore)

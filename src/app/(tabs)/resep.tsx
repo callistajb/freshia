@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Image,
   Platform,
@@ -13,14 +13,16 @@ import {
   View,
 } from "react-native";
 import { auth } from "../../firebaseConfig";
+import { resolveUserAvatar } from "../../utils/avatarSync";
 
 export default function ResepScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { resolveUserAvatar(currentUser).then(setCustomPhoto).catch(() => {});
       setUser(currentUser);
       setImgError(false);
     });
@@ -29,6 +31,8 @@ export default function ResepScreen() {
 
   const displayName =
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
+  const activeAvatarUri = customPhoto || user?.photoURL || null;
+  useFocusEffect(useCallback(() => { resolveUserAvatar(auth.currentUser).then((av) => { setCustomPhoto(av); setImgError(false); }).catch(() => {}); }, []));
 
   const handleSelectCategory = (kategori: "makanan" | "minuman") => {
     router.push({
@@ -60,10 +64,10 @@ export default function ResepScreen() {
               activeOpacity={0.8}
               style={styles.profileAvatarButton}
             >
-              {user?.photoURL && !imgError ? (
+              {activeAvatarUri && !imgError ? (
                 Platform.OS === "web" ? (
                   <img
-                    src={user.photoURL}
+                    src={activeAvatarUri}
                     alt="Profile"
                     referrerPolicy="no-referrer"
                     onError={() => setImgError(true)}
@@ -76,7 +80,7 @@ export default function ResepScreen() {
                   />
                 ) : (
                   <Image
-                    source={{ uri: user.photoURL }}
+                    source={{ uri: activeAvatarUri }}
                     style={styles.profileAvatar}
                     onError={() => setImgError(true)}
                   />

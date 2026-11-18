@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,19 +6,20 @@ import { sendEmailVerification, updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
+import { resolveUserAvatar, saveCustomUserAvatar } from "../utils/avatarSync";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -41,10 +41,17 @@ export default function EditProfileScreen() {
     const loadExtraProfile = async () => {
       if (!user?.uid) return;
       try {
+        const resolvedAvatar = await resolveUserAvatar(user);
+        if (resolvedAvatar) {
+          setPhotoUri(resolvedAvatar);
+        }
+
         const snap = await getDoc(doc(db, "users", user.uid));
         if (snap.exists()) {
           const data = snap.data();
-          if (data.phone) setPhone(String(data.phone));
+          if (data.phone) {
+            setPhone(String(data.phone).replace(/[^0-9+]/g, ""));
+          }
           if (data.businessName) setBusinessName(String(data.businessName));
           if (data.photoBase64) {
             setPhotoUri(String(data.photoBase64));
@@ -55,7 +62,7 @@ export default function EditProfileScreen() {
       }
     };
     loadExtraProfile();
-  }, [user?.uid]);
+  }, [user]);
 
   const showMessage = (title: string, msg: string) => {
     if (Platform.OS === "web") {
@@ -63,6 +70,23 @@ export default function EditProfileScreen() {
     } else {
       Alert.alert(title, msg);
     }
+  };
+
+  // Filter input Nomor Telepon agar HANYA bisa diisi angka (dan tanda + di awal)
+  const handlePhoneChange = (text: string) => {
+    const cleaned = text.replace(/[^0-9+]/g, "");
+    // Pastikan tanda + hanya boleh di karakter pertama
+    const normalized =
+      cleaned.startsWith("+")
+        ? "+" + cleaned.slice(1).replace(/\+/g, "")
+        : cleaned.replace(/\+/g, "");
+    setPhone(normalized.slice(0, 15));
+  };
+
+  // Filter Nama Lengkap agar tidak diisi karakter/simbol acak atau angka
+  const handleNameChange = (text: string) => {
+    const cleaned = text.replace(/[^a-zA-Z\s.,'-]/g, "");
+    setDisplayName(cleaned);
   };
 
   // Kompres gambar menjadi Base64 kecil agar aman disimpan di Firestore (maks 1MB/dokumen)
@@ -149,9 +173,24 @@ export default function EditProfileScreen() {
   const handleSave = async () => {
     if (!user) return;
     const trimmedName = displayName.trim();
-    if (!trimmedName) {
-      showMessage("Validasi", "Nama lengkap tidak boleh kosong.");
+    if (!trimmedName || trimmedName.length < 2) {
+      showMessage(
+        "Validasi Nama",
+        "Nama lengkap minimal harus terdiri dari 2 huruf dan tidak boleh berisi angka.",
+      );
       return;
+    }
+
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone.length > 0) {
+      const digitsOnly = trimmedPhone.replace(/[^0-9]/g, "");
+      if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+        showMessage(
+          "Validasi Nomor Telepon",
+          "Nomor WhatsApp / Telepon harus berupa angka valid (10 hingga 15 digit).",
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -166,17 +205,17 @@ export default function EditProfileScreen() {
         uid: user.uid,
         displayName: trimmedName,
         email: user.email || "",
-        phone: phone.trim(),
+        phone: trimmedPhone,
         businessName: businessName.trim(),
         updatedAt: new Date().toISOString(),
       };
 
       if (newPhotoBase64) {
         userPayload.photoBase64 = newPhotoBase64;
-        await AsyncStorage.setItem(
-          `@freshia_avatar_${user.uid}`,
-          newPhotoBase64,
-        );
+        await saveCustomUserAvatar(user, newPhotoBase64);
+      } else if (photoUri && photoUri.startsWith("data:image")) {
+        userPayload.photoBase64 = photoUri;
+        await saveCustomUserAvatar(user, photoUri);
       }
 
       // 3. Simpan ke Firestore (collection: users)
@@ -248,9 +287,10 @@ export default function EditProfileScreen() {
             <TextInput
               style={styles.input}
               value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Masukkan nama lengkap"
+              onChangeText={handleNameChange}
+              placeholder="Masukkan nama lengkap (hanya huruf)"
               placeholderTextColor="#A09090"
+              maxLength={50}
             />
           </View>
 
@@ -306,10 +346,12 @@ export default function EditProfileScreen() {
             <TextInput
               style={styles.input}
               value={phone}
-              onChangeText={setPhone}
-              placeholder="Contoh: 081234567890"
+              onChangeText={handlePhoneChange}
+              placeholder="Contoh: 081234567890 (hanya angka)"
               placeholderTextColor="#A09090"
-              keyboardType="phone-pad"
+              keyboardType="numeric"
+              inputMode="numeric"
+              maxLength={15}
             />
           </View>
 
@@ -325,6 +367,7 @@ export default function EditProfileScreen() {
               onChangeText={setBusinessName}
               placeholder="Contoh: Toko Buah Segar Jaya"
               placeholderTextColor="#A09090"
+              maxLength={60}
             />
           </View>
 

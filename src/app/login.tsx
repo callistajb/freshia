@@ -33,8 +33,17 @@ export default function SignUpStepOneScreen() {
     }
   };
 
+  // Filter Nama Lengkap agar hanya menerima huruf, spasi, titik, apostrof, atau tanda hubung
+  const handleFullNameChange = (text: string) => {
+    const cleaned = text.replace(/[^a-zA-Z\s.,'-]/g, "");
+    setFullName(cleaned);
+  };
+
   const handleNext = () => {
-    if (!fullName.trim() || !email.trim()) {
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName || !trimmedEmail) {
       showNotification(
         "Perhatian",
         "Masukkan nama lengkap dan email terlebih dahulu.",
@@ -42,11 +51,28 @@ export default function SignUpStepOneScreen() {
       return;
     }
 
+    if (trimmedName.length < 2) {
+      showNotification(
+        "Validasi Nama",
+        "Nama lengkap minimal harus terdiri dari 2 huruf.",
+      );
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      showNotification(
+        "Format Email Tidak Valid",
+        "Masukkan alamat email yang benar (contoh: nama@email.com).",
+      );
+      return;
+    }
+
     router.push({
       pathname: "/signup2",
       params: {
-        fullName: fullName.trim(),
-        email: email.trim(),
+        fullName: trimmedName,
+        email: trimmedEmail,
       },
     });
   };
@@ -84,13 +110,14 @@ export default function SignUpStepOneScreen() {
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.input}
-                placeholder="Masukkan Nama Pengguna"
+                placeholder="Masukkan Nama Lengkap (hanya huruf)"
                 placeholderTextColor="#8E8E93"
                 value={fullName}
-                onChangeText={setFullName}
+                onChangeText={handleFullNameChange}
                 autoCapitalize="words"
+                maxLength={50}
               />
-              <Ionicons name="mail-outline" size={20} color="#6E6E73" />
+              <Ionicons name="person-outline" size={20} color="#6E6E73" />
             </View>
 
             {/* Input Email */}
@@ -101,7 +128,7 @@ export default function SignUpStepOneScreen() {
                 placeholder="Masukkan Email"
                 placeholderTextColor="#8E8E93"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => setEmail(t.replace(/\s/g, ""))}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />

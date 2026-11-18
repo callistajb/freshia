@@ -31,6 +31,23 @@ const GEMINI_MODELS: string[] = [
   process.env.EXPO_PUBLIC_GEMINI_MODEL || "",
 ].filter((name, index, list) => Boolean(name) && list.indexOf(name) === index);
 
+// Membuat fingerprint deterministik dari konten gambar Base64 agar foto yang sama persis selalu menghasilkan persentase kesegaran yang 100% konsisten
+const computeImageFingerprint = (rawBase64: string): string => {
+  const clean = rawBase64.trim();
+  const len = clean.length;
+  let hash1 = 2166136261;
+  let hash2 = 2166136261;
+  const step = Math.max(1, Math.floor(len / 512));
+  for (let i = 0; i < len; i += step) {
+    const code = clean.charCodeAt(i);
+    hash1 ^= code;
+    hash1 = Math.imul(hash1, 16777619);
+    hash2 ^= clean.charCodeAt(len - 1 - i);
+    hash2 = Math.imul(hash2, 16777619);
+  }
+  return `fp_${len}_${(hash1 >>> 0).toString(16)}_${(hash2 >>> 0).toString(16)}`;
+};
+
 // Kompres gambar ke Base64 kecil agar permanen disimpan di AsyncStorage & Firestore (maks 1MB/dokumen)
 const createPersistentThumbnail = async (
   uri: string,

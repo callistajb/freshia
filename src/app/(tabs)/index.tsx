@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
+import { resolveUserAvatar } from "../../utils/avatarSync";
 
 export interface ReminderItem {
   id: string;
@@ -65,17 +66,20 @@ const calculateDynamicShelfLife = (
 export default function HomeScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [isReminderEnabled, setIsReminderEnabled] = useState<boolean>(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { resolveUserAvatar(currentUser).then(setCustomPhoto).catch(() => {});
       setUser(currentUser);
     });
     return unsubscribe;
   }, []);
 
   const loadHomeReminders = useCallback(async () => {
+    resolveUserAvatar(auth.currentUser).then((av) => { setCustomPhoto(av); setImgError(false); }).catch(() => {});
     // 0. Cek preferensi Reminder Buah Hampir Busuk dari halaman Profile
     let enabled = true;
     try {
@@ -228,6 +232,7 @@ export default function HomeScreen() {
 
   const displayName =
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
+  const activeAvatarUri = customPhoto || user?.photoURL || null;
 
   return (
     <View style={styles.root}>
@@ -252,9 +257,9 @@ export default function HomeScreen() {
               activeOpacity={0.8}
               style={styles.profileAvatarButton}
             >
-              {user?.photoURL ? (
+              {activeAvatarUri && !imgError ? (
                 <Image
-                  source={{ uri: user.photoURL }}
+                  source={{ uri: activeAvatarUri }} onError={() => setImgError(true)}
                   style={styles.profileAvatar}
                 />
               ) : (

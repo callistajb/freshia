@@ -32,75 +32,92 @@ export interface RecipeDetailItem {
 const GEMINI_MODELS: string[] = [
   process.env.EXPO_PUBLIC_GEMINI_MODEL || "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-].filter((name, index, list) => list.indexOf(name) === index);
+].filter((name, index, list) => Boolean(name) && list.indexOf(name) === index);
 
-// Resep cadangan otomatis jika server Gemini sedang 503 (sibuk) / limit
+// Daftar katalog buah lengkap agar halaman resep selalu menampilkan semua resep meskipun user belum pernah scan
+const DEFAULT_FRUIT_CATALOG: string[] = [
+  "Pisang",
+  "Apel",
+  "Mangga",
+  "Jeruk",
+  "Alpukat",
+  "Stroberi",
+  "Semangka",
+  "Pepaya",
+  "Anggur",
+  "Melon",
+  "Nanas",
+  "Buah Naga",
+];
+
+// Generator resep katalog lengkap & fallback otomatis untuk setiap jenis buah
 const buildFallbackRecipes = (
   fruitName: string,
   kategori: "makanan" | "minuman",
   imageUri?: string,
 ): RecipeDetailItem[] => {
-  const now = Date.now();
+  const cleanFruit = fruitName.trim() || "Buah Segar";
+  const slug = cleanFruit.toLowerCase().replace(/\s+/g, "-");
+
   if (kategori === "minuman") {
     return [
       {
-        id: `fallback-minuman-${fruitName}-1-${now}`,
-        title: `Smoothie Segar ${fruitName}`,
-        subtitle: `Minuman kental bernutrisi tinggi untuk mengolah ${fruitName} matang agar tidak terbuang.`,
-        fruitName,
+        id: `catalog-minuman-${slug}-1`,
+        title: `Smoothie Bowl & Susu ${cleanFruit}`,
+        subtitle: `Minuman kental bernutrisi tinggi untuk mengolah ${cleanFruit} matang agar tidak terbuang.`,
+        fruitName: cleanFruit,
         prepTime: "10 Menit",
         difficulty: "Mudah",
         calories: "165 kkal",
         ingredients: [
-          `200 gr daging buah ${fruitName}, potong kecil`,
+          `200 gr daging buah ${cleanFruit}, potong kecil`,
           "150 ml susu cair rendah lemak atau yogurt tawar",
           "1 sdm madu murni",
           "Es batu secukupnya",
         ],
         steps: [
-          `Kupas dan bersihkan buah ${fruitName}, lalu potong dadu agar mudah diblender.`,
+          `Kupas dan bersihkan buah ${cleanFruit}, lalu potong dadu agar mudah diblender.`,
           "Masukkan potongan buah, susu cair, madu, dan es batu ke dalam blender.",
           "Haluskan selama 45 detik hingga tekstur lembut dan creamy, lalu sajikan segera.",
         ],
         imageUri,
       },
       {
-        id: `fallback-minuman-${fruitName}-2-${now}`,
-        title: `Es Jus ${fruitName} Madu Jeruk Nipis`,
-        subtitle: `Perpaduan segar ${fruitName} dengan perasan jeruk nipis yang kaya antioksidan.`,
-        fruitName,
+        id: `catalog-minuman-${slug}-2`,
+        title: `Es Jus ${cleanFruit} Madu Lemon`,
+        subtitle: `Perpaduan segar ${cleanFruit} dengan perasan lemon/jeruk nipis yang kaya antioksidan.`,
+        fruitName: cleanFruit,
         prepTime: "10 Menit",
         difficulty: "Mudah",
         calories: "120 kkal",
         ingredients: [
-          `250 gr daging buah ${fruitName}`,
+          `250 gr daging buah ${cleanFruit}`,
           "200 ml air matang dingin",
-          "1 sdm perasan jeruk nipis",
+          "1 sdm perasan lemon atau jeruk nipis",
           "1-2 sdm madu atau gula aren cair",
         ],
         steps: [
-          `Haluskan daging buah ${fruitName} bersama air matang menggunakan blender.`,
+          `Haluskan daging buah ${cleanFruit} bersama air matang menggunakan blender.`,
           "Saring bila ingin tekstur lebih jernih, lalu tambahkan madu dan perasan jeruk nipis.",
           "Aduk rata dan sajikan dingin dengan tambahan es batu.",
         ],
         imageUri,
       },
       {
-        id: `fallback-minuman-${fruitName}-3-${now}`,
-        title: `Infused Water ${fruitName} Mint`,
+        id: `catalog-minuman-${slug}-3`,
+        title: `Infused Water ${cleanFruit} Daun Mint`,
         subtitle: `Minuman detoks ringan tanpa pemanis tambahan untuk kesegaran harian.`,
-        fruitName,
+        fruitName: cleanFruit,
         prepTime: "5 Menit",
         difficulty: "Mudah",
-        calories: "25 kkal",
+        calories: "35 kkal",
         ingredients: [
-          `100 gr irisan tipis buah ${fruitName}`,
+          `100 gr irisan tipis buah ${cleanFruit}`,
           "500 ml air mineral dingin",
           "5 lembar daun mint segar",
         ],
         steps: [
-          `Iris tipis buah ${fruitName} dan masukkan ke dalam botol atau pitcher kaca.`,
+          `Iris tipis buah ${cleanFruit} dan masukkan ke dalam botol atau pitcher kaca.`,
           "Tambahkan daun mint dan tuang air mineral dingin.",
           "Simpan di kulkas minimal 1 jam sebelum diminum agar sari buah meresap.",
         ],
@@ -111,63 +128,63 @@ const buildFallbackRecipes = (
 
   return [
     {
-      id: `fallback-makanan-${fruitName}-1-${now}`,
-      title: `Selai Homemade ${fruitName}`,
-      subtitle: `Olesan roti alami tanpa pengawet untuk memperpanjang masa simpan ${fruitName}.`,
-      fruitName,
+      id: `catalog-makanan-${slug}-1`,
+      title: `Selai Homemade ${cleanFruit} Zero-Waste`,
+      subtitle: `Olesan roti alami tanpa pengawet untuk memperpanjang masa simpan ${cleanFruit} yang mulai lembek.`,
+      fruitName: cleanFruit,
       prepTime: "25 Menit",
       difficulty: "Mudah",
       calories: "140 kkal",
       ingredients: [
-        `300 gr daging buah ${fruitName}, cincang halus`,
+        `300 gr daging buah ${cleanFruit}, cincang halus`,
         "3 sdm gula pasir atau gula aren",
         "1 sdm air perasan lemon atau jeruk nipis",
-        "50 ml air",
+        "50 ml air matang",
       ],
       steps: [
-        `Masak potongan ${fruitName}, gula, dan air di atas api kecil sambil diaduk perlahan.`,
-        "Lumatkan daging buah saat mulai melunak hingga mengental.",
+        `Masak potongan ${cleanFruit}, gula, dan air di atas api kecil sambil diaduk perlahan.`,
+        "Lumatkan daging buah saat mulai melunak hingga mengental seperti selai.",
         "Tambahkan air perasan lemon, aduk 2 menit lalu simpan dalam stoples kaca bersih.",
       ],
       imageUri,
     },
     {
-      id: `fallback-makanan-${fruitName}-2-${now}`,
-      title: `Overnight Oats & Topping ${fruitName}`,
-      subtitle: `Menu sarapan praktis kaya serat dengan potongan segar ${fruitName}.`,
-      fruitName,
+      id: `catalog-makanan-${slug}-2`,
+      title: `Overnight Oats & Topping ${cleanFruit}`,
+      subtitle: `Menu sarapan praktis kaya serat dengan potongan buah ${cleanFruit}.`,
+      fruitName: cleanFruit,
       prepTime: "10 Menit",
       difficulty: "Mudah",
       calories: "240 kkal",
       ingredients: [
-        `150 gr daging buah ${fruitName}, potong dadu`,
+        `150 gr daging buah ${cleanFruit}, potong dadu`,
         "5 sdm rolled oats",
         "150 ml susu cair atau susu nabati",
         "1 sdt chia seed dan 1 sdm madu",
       ],
       steps: [
         "Campurkan oats, susu cair, chia seed, dan madu di dalam wadah tertutup.",
-        `Tambahkan setengah bagian potongan ${fruitName}, aduk rata dan simpan di kulkas semalaman.`,
-        `Sajikan keesokan paginya dengan sisa potongan ${fruitName} di atasnya.`,
+        `Tambahkan setengah bagian potongan ${cleanFruit}, aduk rata dan simpan di kulkas semalaman.`,
+        `Sajikan keesokan paginya dengan sisa potongan ${cleanFruit} di atasnya.`,
       ],
       imageUri,
     },
     {
-      id: `fallback-makanan-${fruitName}-3-${now}`,
-      title: `Salad Buah ${fruitName} Saus Yogurt`,
-      subtitle: `Camilan sehat segar dengan dressing yogurt madu yang ringan.`,
-      fruitName,
+      id: `catalog-makanan-${slug}-3`,
+      title: `Salad Buah ${cleanFruit} Saus Yogurt Madu`,
+      subtitle: `Camilan sehat segar berbahan ${cleanFruit} dengan dressing yogurt madu yang ringan.`,
+      fruitName: cleanFruit,
       prepTime: "15 Menit",
       difficulty: "Mudah",
       calories: "175 kkal",
       ingredients: [
-        `250 gr daging buah ${fruitName}, potong sesuai selera`,
+        `250 gr daging buah ${cleanFruit}, potong sesuai selera`,
         "100 gr yogurt plain kental",
-        "1 sdm madu",
+        "1 sdm madu murni",
         "Keju parut secukupnya untuk taburan",
       ],
       steps: [
-        `Tata potongan buah ${fruitName} dingin di dalam mangkuk saji.`,
+        `Tata potongan buah ${cleanFruit} dingin di dalam mangkuk saji.`,
         "Aduk rata yogurt plain bersama madu hingga menjadi saus lembut.",
         "Siram saus di atas buah dan beri taburan keju parut sebelum disajikan.",
       ],
@@ -175,6 +192,13 @@ const buildFallbackRecipes = (
     },
   ];
 };
+
+export interface FruitOption {
+  name: string;
+  imageUri?: string;
+  freshness?: number;
+  isScanned: boolean;
+}
 
 export default function ResepListScreen() {
   const router = useRouter();
@@ -186,80 +210,59 @@ export default function ResepListScreen() {
   const kategori: "makanan" | "minuman" =
     params.kategori === "minuman" ? "minuman" : "makanan";
 
-  const [scannedFruits, setScannedFruits] = useState<
-    { name: string; imageUri?: string; freshness?: number }[]
-  >([]);
-  const [selectedFruit, setSelectedFruit] = useState<string>(
-    params.fruit || "",
+  const [scannedFruits, setScannedFruits] = useState<FruitOption[]>([]);
+  // Multi-select buah yang dimiliki user (kosong = tampilkan Semua Buah)
+  const [selectedFruits, setSelectedFruits] = useState<string[]>(
+    params.fruit ? [params.fruit] : [],
   );
   const [searchQuery, setSearchQuery] = useState("");
-  const [recipes, setRecipes] = useState<RecipeDetailItem[]>([]);
+  const [aiGeneratedByFruit, setAiGeneratedByFruit] = useState<
+    Record<string, RecipeDetailItem[]>
+  >({});
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
 
-  // 1. Ambil HANYA buah yang beneran pernah di-scan user dari AsyncStorage
-  const loadScannedFruits = useCallback(async () => {
+  // 1. Muat daftar buah yang pernah di-scan user lalu gabungkan dengan katalog buah lengkap
+  const loadFruitsAndHistory = useCallback(async () => {
     setIsLoadingData(true);
     const currentUid = auth.currentUser?.uid;
     try {
       const stored = await AsyncStorage.getItem("@freshia_history");
-      if (!stored) {
-        setScannedFruits([]);
-        setIsLoadingData(false);
-        return;
+      const parsed = stored ? JSON.parse(stored) : [];
+      const fruitMap = new Map<string, FruitOption>();
+
+      if (Array.isArray(parsed)) {
+        parsed.forEach((entry: any) => {
+          if (currentUid && entry.userId && entry.userId !== currentUid) return;
+          const pct = Number(entry.result?.analysis?.freshnessPercentage ?? 0);
+          const label = String(entry.result?.label || "").trim();
+
+          if (
+            !label ||
+            label.toLowerCase() === "buah" ||
+            label.toLowerCase() === "bukan buah" ||
+            pct === 0
+          ) {
+            return;
+          }
+
+          const key = label.toLowerCase();
+          if (!fruitMap.has(key)) {
+            fruitMap.set(key, {
+              name: label,
+              imageUri: entry.image,
+              freshness: pct,
+              isScanned: true,
+            });
+          }
+        });
       }
 
-      const parsed = JSON.parse(stored);
-      if (!Array.isArray(parsed)) {
-        setScannedFruits([]);
-        setIsLoadingData(false);
-        return;
-      }
-
-      const fruitMap = new Map<
-        string,
-        { name: string; imageUri?: string; freshness?: number }
-      >();
-
-      parsed.forEach((entry: any) => {
-        if (currentUid && entry.userId && entry.userId !== currentUid) return;
-        const pct = Number(entry.result?.analysis?.freshnessPercentage ?? 0);
-        const label = String(entry.result?.label || "").trim();
-
-        // Filter objek bukan buah atau hasil scan error 0%
-        if (
-          !label ||
-          label.toLowerCase() === "buah" ||
-          label.toLowerCase() === "bukan buah" ||
-          pct === 0
-        ) {
-          return;
-        }
-
-        if (!fruitMap.has(label.toLowerCase())) {
-          fruitMap.set(label.toLowerCase(), {
-            name: label,
-            imageUri: entry.image,
-            freshness: pct,
-          });
-        }
-      });
-
-      const list = Array.from(fruitMap.values());
-      setScannedFruits(list);
+      setScannedFruits(Array.from(fruitMap.values()));
 
       if (params.fruit) {
-        setSelectedFruit(params.fruit);
-      } else if (list.length > 0) {
-        setSelectedFruit((prev) =>
-          prev && list.some((f) => f.name.toLowerCase() === prev.toLowerCase())
-            ? prev
-            : list[0].name,
-        );
-      } else {
-        setSelectedFruit("");
+        setSelectedFruits([params.fruit]);
       }
     } catch (e) {
       console.warn("Gagal membaca riwayat buah untuk resep:", e);
@@ -271,33 +274,72 @@ export default function ResepListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadScannedFruits();
-    }, [loadScannedFruits]),
+      loadFruitsAndHistory();
+    }, [loadFruitsAndHistory]),
   );
 
-  // 2. Generate resep lewat Gemini AI dengan fallback otomatis jika server sibuk (503)
+  // Gabungkan buah hasil scan user (di urutan paling depan) dengan katalog semua buah
+  const allAvailableFruits: FruitOption[] = useMemo(() => {
+    const map = new Map<string, FruitOption>();
+
+    // Masukkan buah hasil scan dulu agar mudah terlihat
+    scannedFruits.forEach((f) => {
+      map.set(f.name.toLowerCase(), f);
+    });
+
+    // Tambahkan seluruh buah dari katalog default
+    DEFAULT_FRUIT_CATALOG.forEach((fruitName) => {
+      const key = fruitName.toLowerCase();
+      // Cek apakah sudah ada versi buah yang mirip (misal "Apel Merah" vs "Apel")
+      if (!map.has(key)) {
+        map.set(key, {
+          name: fruitName,
+          isScanned: false,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [scannedFruits]);
+
+  // Toggle pilih/batal pilih buah yang dimiliki user (Multi-Select)
+  const handleToggleFruitSelection = (fruitName: string) => {
+    setSelectedFruits((prev) => {
+      const exists = prev.some(
+        (f) => f.toLowerCase() === fruitName.toLowerCase(),
+      );
+      if (exists) {
+        return prev.filter((f) => f.toLowerCase() !== fruitName.toLowerCase());
+      }
+      return [...prev, fruitName];
+    });
+  };
+
+  // Pilih hanya semua buah yang pernah di-scan user
+  const handleSelectMyScannedFruits = () => {
+    if (scannedFruits.length === 0) return;
+    const scannedNames = scannedFruits.map((f) => f.name);
+    const isAlreadySame =
+      selectedFruits.length === scannedNames.length &&
+      scannedNames.every((n) =>
+        selectedFruits.some((s) => s.toLowerCase() === n.toLowerCase()),
+      );
+    setSelectedFruits(isAlreadySame ? [] : scannedNames);
+  };
+
+  // 2. Fungsi Generate Resep Tambahan lewat Gemini AI untuk buah yang dipilih
   const generateRecipesWithGemini = useCallback(
     async (fruitTarget: string) => {
-      if (!fruitTarget) {
-        setRecipes([]);
-        return;
-      }
+      if (!fruitTarget) return;
 
-      const matchedStock = scannedFruits.find(
+      const matchedStock = allAvailableFruits.find(
         (f) => f.name.toLowerCase() === fruitTarget.toLowerCase(),
       );
 
       const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-      if (!GEMINI_API_KEY) {
-        setRecipes(
-          buildFallbackRecipes(fruitTarget, kategori, matchedStock?.imageUri),
-        );
-        setAiError(null);
-        return;
-      }
+      if (!GEMINI_API_KEY) return;
 
       setIsLoadingAI(true);
-      setAiError(null);
 
       const kategoriLabel =
         kategori === "makanan"
@@ -323,8 +365,6 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
   }
 ]`;
 
-      let success = false;
-
       for (const model of GEMINI_MODELS) {
         try {
           const response = await fetch(
@@ -338,7 +378,7 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                  temperature: 0.4,
+                  temperature: 0.2,
                   responseMimeType: "application/json",
                 },
               }),
@@ -346,13 +386,7 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
           );
 
           const data = await response.json();
-          if (!response.ok) {
-            console.warn(
-              `Gemini (${model}) gagal [${response.status}]:`,
-              data?.error?.message,
-            );
-            continue;
-          }
+          if (!response.ok) continue;
 
           const parts = data?.candidates?.[0]?.content?.parts;
           const textResponse = Array.isArray(parts)
@@ -373,7 +407,7 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
             if (Array.isArray(parsedList) && parsedList.length > 0) {
               const formatted: RecipeDetailItem[] = parsedList.map(
                 (item: any, idx: number) => ({
-                  id: `${kategori}-${fruitTarget}-${idx}-${Date.now()}`,
+                  id: `ai-${kategori}-${fruitTarget}-${idx}-${Date.now()}`,
                   title: String(item.title || `Olahan ${fruitTarget}`),
                   subtitle: String(
                     item.subtitle || "Resep sehat zero-waste dari Freshia",
@@ -391,8 +425,10 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
                   imageUri: matchedStock?.imageUri,
                 }),
               );
-              setRecipes(formatted);
-              success = true;
+              setAiGeneratedByFruit((prev) => ({
+                ...prev,
+                [fruitTarget.toLowerCase()]: formatted,
+              }));
               break;
             }
           }
@@ -400,37 +436,60 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
           console.warn(`Kesalahan jaringan pada ${model}:`, err?.message);
         }
       }
-
-      if (!success) {
-        // Gunakan resep cadangan otomatis agar user tetap mendapat ide olahan meski server AI 503
-        setRecipes(
-          buildFallbackRecipes(fruitTarget, kategori, matchedStock?.imageUri),
-        );
-        setAiError(null);
-      }
       setIsLoadingAI(false);
     },
-    [kategori, scannedFruits],
+    [kategori, allAvailableFruits],
   );
 
+  // Jika user memilih tepat 1 buah spesifik dan belum pernah di-generate AI, coba perkaya dengan Gemini AI
   useEffect(() => {
-    if (selectedFruit) {
-      generateRecipesWithGemini(selectedFruit);
-    } else {
-      setRecipes([]);
+    if (selectedFruits.length === 1) {
+      const target = selectedFruits[0];
+      if (!aiGeneratedByFruit[target.toLowerCase()]) {
+        generateRecipesWithGemini(target);
+      }
     }
-  }, [selectedFruit, generateRecipesWithGemini]);
+  }, [selectedFruits, aiGeneratedByFruit, generateRecipesWithGemini]);
 
-  const filteredRecipes = useMemo(() => {
+  // Susun daftar semua resep yang ditampilkan berdasarkan filter buah yang dipilih user
+  const displayedRecipes: RecipeDetailItem[] = useMemo(() => {
+    const activeFruitList =
+      selectedFruits.length > 0
+        ? allAvailableFruits.filter((f) =>
+            selectedFruits.some(
+              (sel) => sel.toLowerCase() === f.name.toLowerCase(),
+            ),
+          )
+        : allAvailableFruits;
+
+    const combined: RecipeDetailItem[] = [];
+    activeFruitList.forEach((fruitObj) => {
+      const key = fruitObj.name.toLowerCase();
+      const aiList = aiGeneratedByFruit[key];
+      if (aiList && aiList.length > 0) {
+        combined.push(...aiList);
+      } else {
+        combined.push(
+          ...buildFallbackRecipes(fruitObj.name, kategori, fruitObj.imageUri),
+        );
+      }
+    });
+
     const kw = searchQuery.trim().toLowerCase();
-    if (!kw) return recipes;
-    return recipes.filter(
+    if (!kw) return combined;
+    return combined.filter(
       (r) =>
         r.title.toLowerCase().includes(kw) ||
         r.subtitle.toLowerCase().includes(kw) ||
         r.fruitName.toLowerCase().includes(kw),
     );
-  }, [recipes, searchQuery]);
+  }, [
+    selectedFruits,
+    allAvailableFruits,
+    aiGeneratedByFruit,
+    kategori,
+    searchQuery,
+  ]);
 
   const openRecipeDetail = (item: RecipeDetailItem) => {
     router.push({
@@ -475,47 +534,10 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
           {isLoadingData ? (
             <View style={styles.loadingCard}>
               <ActivityIndicator size="large" color="#C8201B" />
-              <Text style={styles.loadingTitle}>Memeriksa Stok Buah...</Text>
-            </View>
-          ) : scannedFruits.length === 0 ? (
-            /* Tampilan Kosong Jika User Belum Pernah Foto/Scan Buah */
-            <View style={styles.emptyCard}>
-              <MaterialCommunityIcons
-                name="food-apple-outline"
-                size={52}
-                color="#C8201B"
-              />
-              <Text style={styles.emptyTitle}>Belum Ada Buah yang Di-scan</Text>
-              <Text style={styles.emptySubtitle}>
-                Scan atau unggah foto buah terlebih dahulu agar Freshia bisa
-                membuatkan resep sesuai buah yang kamu punya.
-              </Text>
-              <TouchableOpacity
-                style={styles.scanNowBtn}
-                activeOpacity={0.85}
-                onPress={() => router.push("/(tabs)/scanner")}
-              >
-                <Ionicons name="scan" size={18} color="#FFFFFF" />
-                <Text style={styles.scanNowText}>Scan Buah Sekarang</Text>
-              </TouchableOpacity>
+              <Text style={styles.loadingTitle}>Memuat Katalog Resep...</Text>
             </View>
           ) : (
             <>
-              {/* Info Stok Buah Hasil Scan */}
-              <View style={styles.stockBanner}>
-                <MaterialCommunityIcons
-                  name="chef-hat"
-                  size={22}
-                  color="#9A1B17"
-                />
-                <Text style={styles.stockBannerText}>
-                  Buah hasil scan kamu:{" "}
-                  <Text style={{ fontWeight: "700" }}>
-                    {scannedFruits.map((f) => f.name).join(", ")}
-                  </Text>
-                </Text>
-              </View>
-
               {/* Search Bar */}
               <View style={styles.searchBox}>
                 <Ionicons
@@ -526,7 +548,7 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
                 />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Cari resep olahan buah..."
+                  placeholder="Cari nama resep atau nama buah..."
                   placeholderTextColor="#9E9E9E"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -538,67 +560,210 @@ Kembalikan respons MURNI dalam format JSON array berisi 3 objek dengan struktur 
                 )}
               </View>
 
-              {/* Filter Chip HANYA Buah Hasil Scan User */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipRow}
-              >
-                {scannedFruits.map((fruit) => {
-                  const isActive =
-                    selectedFruit.toLowerCase() === fruit.name.toLowerCase();
-                  return (
+              {/* Panel Selection Buah yang Dimiliki User */}
+              <View style={styles.selectionCard}>
+                <View style={styles.selectionHeaderRow}>
+                  <View style={styles.selectionTitleRow}>
+                    <MaterialCommunityIcons
+                      name="fruit-cherries"
+                      size={18}
+                      color="#9A1B17"
+                    />
+                    <Text style={styles.selectionTitle}>
+                      Pilih Buah yang Kamu Punya:
+                    </Text>
+                  </View>
+
+                  {selectedFruits.length > 0 && (
                     <TouchableOpacity
-                      key={fruit.name}
-                      style={[styles.chip, isActive && styles.chipActive]}
-                      onPress={() => setSelectedFruit(fruit.name)}
+                      onPress={() => setSelectedFruits([])}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.resetFilterText}>Reset Filter</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <Text style={styles.selectionSubtitle}>
+                  Ketuk satu atau beberapa buah di bawah untuk memfilter resep
+                  sesuai stok buahmu
+                </Text>
+
+                {/* Tombol Cepat: Semua Buah & Buah Hasil Scan */}
+                <View style={styles.quickFilterRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickFilterBtn,
+                      selectedFruits.length === 0 &&
+                        styles.quickFilterBtnActive,
+                    ]}
+                    onPress={() => setSelectedFruits([])}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={
+                        selectedFruits.length === 0
+                          ? "CheckmarkCircle" in Ionicons.glyphMap
+                            ? "checkmark-circle"
+                            : "checkmark-circle"
+                          : "apps-outline"
+                      }
+                      size={15}
+                      color={selectedFruits.length === 0 ? "#FFFFFF" : "#9A1B17"}
+                    />
+                    <Text
+                      style={[
+                        styles.quickFilterText,
+                        selectedFruits.length === 0 &&
+                          styles.quickFilterTextActive,
+                      ]}
+                    >
+                      Semua Buah ({allAvailableFruits.length})
+                    </Text>
+                  </TouchableOpacity>
+
+                  {scannedFruits.length > 0 && (
+                    <TouchableOpacity
+                      style={[
+                        styles.quickFilterBtn,
+                        selectedFruits.length === scannedFruits.length &&
+                          scannedFruits.every((sf) =>
+                            selectedFruits.some(
+                              (sel) =>
+                                sel.toLowerCase() === sf.name.toLowerCase(),
+                            ),
+                          ) &&
+                          styles.quickFilterBtnActive,
+                      ]}
+                      onPress={handleSelectMyScannedFruits}
                       activeOpacity={0.8}
                     >
+                      <Ionicons
+                        name="scan-circle-outline"
+                        size={16}
+                        color={
+                          selectedFruits.length === scannedFruits.length &&
+                          scannedFruits.every((sf) =>
+                            selectedFruits.some(
+                              (sel) =>
+                                sel.toLowerCase() === sf.name.toLowerCase(),
+                            ),
+                          )
+                            ? "#FFFFFF"
+                            : "#9A1B17"
+                        }
+                      />
                       <Text
                         style={[
-                          styles.chipText,
-                          isActive && styles.chipTextActive,
+                          styles.quickFilterText,
+                          selectedFruits.length === scannedFruits.length &&
+                            scannedFruits.every((sf) =>
+                              selectedFruits.some(
+                                (sel) =>
+                                  sel.toLowerCase() === sf.name.toLowerCase(),
+                              ),
+                            ) &&
+                            styles.quickFilterTextActive,
                         ]}
                       >
-                        {fruit.name} ({fruit.freshness}%)
+                        Buah Hasil Scan ({scannedFruits.length})
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* Loading / Error / Hasil Resep dari Gemini AI */}
-              {isLoadingAI ? (
-                <View style={styles.loadingCard}>
-                  <ActivityIndicator size="large" color="#C8201B" />
-                  <Text style={styles.loadingTitle}>
-                    Meracik Resep {selectedFruit}...
-                  </Text>
-                  <Text style={styles.loadingSubtitle}>
-                    AI Freshia sedang menyiapkan ide olahan zero-waste dari
-                    hasil scan kamu
-                  </Text>
+                  )}
                 </View>
-              ) : aiError ? (
+
+                {/* Multi-select Chips Seluruh Buah */}
+                <View style={styles.fruitChipsWrap}>
+                  {allAvailableFruits.map((fruit) => {
+                    const isSelected = selectedFruits.some(
+                      (s) => s.toLowerCase() === fruit.name.toLowerCase(),
+                    );
+                    return (
+                      <TouchableOpacity
+                        key={fruit.name}
+                        style={[
+                          styles.chip,
+                          fruit.isScanned && styles.chipScanned,
+                          isSelected && styles.chipActive,
+                        ]}
+                        onPress={() => handleToggleFruitSelection(fruit.name)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name={
+                            isSelected
+                              ? "checkbox"
+                              : fruit.isScanned
+                                ? "scan-outline"
+                                : "add-circle-outline"
+                          }
+                          size={14}
+                          color={isSelected ? "#9A1B17" : "#7A6A6A"}
+                        />
+                        <Text
+                          style={[
+                            styles.chipText,
+                            isSelected && styles.chipTextActive,
+                          ]}
+                        >
+                          {fruit.name}
+                          {fruit.freshness ? ` (${fruit.freshness}%)` : ""}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Ringkasan Jumlah Resep yang Ditampilkan */}
+              <View style={styles.resultHeaderRow}>
+                <Text style={styles.resultCountText}>
+                  Menampilkan{" "}
+                  <Text style={{ fontWeight: "700", color: "#9A1B17" }}>
+                    {displayedRecipes.length} resep
+                  </Text>{" "}
+                  {selectedFruits.length > 0
+                    ? `untuk: ${selectedFruits.join(", ")}`
+                    : "dari semua jenis buah"}
+                </Text>
+
+                {isLoadingAI && (
+                  <View style={styles.aiInlineBadge}>
+                    <ActivityIndicator size="small" color="#C8201B" />
+                    <Text style={styles.aiInlineText}>Meracik AI...</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Daftar Kartu Resep */}
+              {displayedRecipes.length === 0 ? (
                 <View style={styles.emptyCard}>
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={44}
+                  <MaterialCommunityIcons
+                    name="food-apple-outline"
+                    size={48}
                     color="#C8201B"
                   />
-                  <Text style={styles.emptyTitle}>Gagal Memuat Resep AI</Text>
-                  <Text style={styles.emptySubtitle}>{aiError}</Text>
+                  <Text style={styles.emptyTitle}>Resep Tidak Ditemukan</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Tidak ada resep yang cocok dengan kata kunci pencarianmu.
+                    Coba hapus kata kunci atau pilih buah lainnya.
+                  </Text>
                   <TouchableOpacity
                     style={styles.scanNowBtn}
                     activeOpacity={0.85}
-                    onPress={() => generateRecipesWithGemini(selectedFruit)}
+                    onPress={() => {
+                      setSearchQuery("");
+                      setSelectedFruits([]);
+                    }}
                   >
                     <Ionicons name="refresh" size={18} color="#FFFFFF" />
-                    <Text style={styles.scanNowText}>Coba Lagi</Text>
+                    <Text style={styles.scanNowText}>
+                      Tampilkan Semua Resep
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                filteredRecipes.map((item) => (
+                displayedRecipes.map((item) => (
                   <TouchableOpacity
                     key={item.id}
                     style={styles.recipeCard}
@@ -749,21 +914,6 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: "700",
   },
-  stockBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FCE8E8",
-    borderRadius: 16,
-    padding: 12,
-    gap: 10,
-    marginBottom: 14,
-  },
-  stockBannerText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#9A1B17",
-    lineHeight: 17,
-  },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -784,30 +934,124 @@ const styles = StyleSheet.create({
     color: "#1C1C1E",
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
   },
-  chipRow: {
-    gap: 8,
-    paddingBottom: 14,
-  },
-  chip: {
+  selectionCard: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2DADA",
-    borderRadius: 18,
+    borderColor: "#F0E2E2",
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 14,
+  },
+  selectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 3,
+  },
+  selectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  selectionTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#8E1612",
+  },
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#C8201B",
+    textDecorationLine: "underline",
+  },
+  selectionSubtitle: {
+    fontSize: 11.5,
+    color: "#666666",
+    marginBottom: 10,
+  },
+  quickFilterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  quickFilterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FCE8E8",
     paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F4C2C2",
+  },
+  quickFilterBtnActive: {
+    backgroundColor: "#C8201B",
+    borderColor: "#C8201B",
+  },
+  quickFilterText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#9A1B17",
+  },
+  quickFilterTextActive: {
+    color: "#FFFFFF",
+  },
+  fruitChipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FAFAFA",
+    borderWidth: 1,
+    borderColor: "#E2DADA",
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+  },
+  chipScanned: {
+    borderColor: "#E5A5A3",
+    backgroundColor: "#FFF9F9",
   },
   chipActive: {
     backgroundColor: "#FCE8E8",
     borderColor: "#9A1B17",
   },
   chipText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "500",
-    color: "#8E8E93",
+    color: "#555555",
   },
   chipTextActive: {
     color: "#9A1B17",
     fontWeight: "700",
+  },
+  resultHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  resultCountText: {
+    fontSize: 12.5,
+    color: "#555555",
+    flex: 1,
+  },
+  aiInlineBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  aiInlineText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#C8201B",
   },
   loadingCard: {
     backgroundColor: "#FFFFFF",
@@ -825,11 +1069,6 @@ const styles = StyleSheet.create({
     color: "#9A1B17",
     marginTop: 14,
     marginBottom: 4,
-  },
-  loadingSubtitle: {
-    fontSize: 12,
-    color: "#666666",
-    textAlign: "center",
   },
   recipeCard: {
     flexDirection: "row",

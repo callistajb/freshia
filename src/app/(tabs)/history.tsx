@@ -24,6 +24,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
+import { resolveUserAvatar } from "../../utils/avatarSync";
 
 export interface ScanHistoryItem {
   id: string;
@@ -47,6 +48,7 @@ type FilterTab = "terbaru" | "diproses" | "butuh_perhatian";
 export default function HistoryScreen() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
 
   const [historyList, setHistoryList] = useState<ScanHistoryItem[]>([]);
@@ -54,7 +56,7 @@ export default function HistoryScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("terbaru");
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { resolveUserAvatar(currentUser).then(setCustomPhoto).catch(() => {});
       setUser(currentUser);
       setImgError(false);
     });
@@ -63,6 +65,7 @@ export default function HistoryScreen() {
 
   // Memuat riwayat dari AsyncStorage (Offline-First) lalu menyinkronkan dengan Firestore
   const loadHistoryData = useCallback(async () => {
+    resolveUserAvatar(auth.currentUser).then((av) => { setCustomPhoto(av); setImgError(false); }).catch(() => {});
     const currentUid = auth.currentUser?.uid;
 
     // 1. Baca dari cache lokal AsyncStorage dulu agar tampil instan
@@ -300,6 +303,7 @@ export default function HistoryScreen() {
 
   const displayName =
     user?.displayName || (user?.email ? user.email.split("@")[0] : "Freshian");
+  const activeAvatarUri = customPhoto || user?.photoURL || null;
 
   const filteredHistory = useMemo(() => {
     return historyList.filter((item) => {
@@ -347,10 +351,10 @@ export default function HistoryScreen() {
               activeOpacity={0.8}
               style={styles.profileAvatarButton}
             >
-              {user?.photoURL && !imgError ? (
+              {activeAvatarUri && !imgError ? (
                 Platform.OS === "web" ? (
                   <img
-                    src={user.photoURL}
+                    src={activeAvatarUri}
                     alt="Profile"
                     referrerPolicy="no-referrer"
                     onError={() => setImgError(true)}
@@ -363,7 +367,7 @@ export default function HistoryScreen() {
                   />
                 ) : (
                   <Image
-                    source={{ uri: user.photoURL }}
+                    source={{ uri: activeAvatarUri }}
                     style={styles.profileAvatar}
                     onError={() => setImgError(true)}
                   />
