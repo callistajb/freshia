@@ -1,4 +1,4 @@
-**Milestone:** Week [11] &nbsp;|&nbsp; **Date:** [17/11/2026] &nbsp;|&nbsp; **Version:** [1.0] &nbsp;|&nbsp; **Status:** [Final]
+**Milestone:** Week [11] &nbsp;|&nbsp; **Date:** [18/11/2026] &nbsp;|&nbsp; **Version:** [1.1] &nbsp;|&nbsp; **Status:** [Final]
 
 ---
 
@@ -85,7 +85,7 @@
 
 ### A1. Executive Summary
 
-Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi penuh dari fase perancangan sistem (*System Design* & *Clickable MVP Prototype* pada Week 6) menuju fase implementasi kode teknis (*Coding Implementation*) dan pengujian terpadu (*Testing & QA*). Mengacu pada arsitektur React Native (Expo SDK 58) dan Expo Router, seluruh kebutuhan fungsional utama (FR-01 hingga FR-07 beserta perluasan fitur FR-08 hingga FR-10) dan kebutuhan non-fungsional (NFR-01 hingga NFR-05) telah selesai diimplementasikan (100% *on track*). Pencapaian utama pada periode ini meliputi: (1) implementasi otentikasi pengguna berbasis Firebase Authentication (Email/Password & Google OAuth) serta pengelolaan profil lengkap (Edit Profil, Ganti Kata Sandi, Hapus Akun); (2) implementasi *Hybrid AI Pipeline* yang memadukan deteksi awal Roboflow Computer Vision dengan penalaran multimodal Google Gemini Vision API (dilengkapi mekanisme *multi-model fallback* dan *AbortController timeout* 10 detik); (3) implementasi segmentasi Mode Bisnis (input dimensi krat P×L×T & berat) dan Mode Pribadi (toggle input Berat vs Jumlah Buah dengan *preset chips*); (4) visualisasi grafik donat kesegaran (*Donut Chart*), kalkulasi nilai jual sisa (*salvage value*), pengingat masa simpan buah dinamis (*Reminder*), serta alur resep *zero-waste* dengan *resilient fallback*; (5) implementasi arsitektur basis data Cloud Firestore 5 koleksi (`users`, `scan_history`, `saved_recipes`, `reminders`, `app_feedback`) yang dipadukan dengan *Offline-First Edge Caching* (`AsyncStorage` thumbnail terkompresi & Cloudinary CDN); serta (6) pengujian unit otomatis dengan 14 skenario uji (tingkat kelulusan 100%, *line coverage* 98.68%), otomasi pipeline CI/CD GitHub Actions, dan dokumentasi rilis produksi pada `DEPLOYMENT.md`. Fokus tim pada periode selanjutnya (Week 12–Week 14) adalah kompilasi produksi Android App Bundle (`.aab`) melalui EAS Build, distribusi *Closed Testing Track* Google Play Console kepada minimal 20 penguji aktif, dan persiapan presentasi akhir.
+Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi penuh dari fase perancangan sistem (*System Design* & *Clickable MVP Prototype* pada Week 6) menuju fase implementasi kode teknis (*Coding Implementation*) dan pengujian aplikasi (*Testing & QA*). Mengacu pada kerangka kerja React Native (Expo SDK 58) dan Expo Router, seluruh kebutuhan fungsional utama (FR-01 hingga FR-07 beserta fitur pendukung manajemen profil dan pengingat masa simpan buah) serta kebutuhan non-fungsional (NFR-01 hingga NFR-05) telah selesai diimplementasikan dan dapat dijalankan di perangkat seluler (via Expo Go) maupun Web Staging (`on.expo.app`). Pencapaian utama pada periode ini meliputi: (1) implementasi autentikasi pengguna berbasis Firebase Authentication (Email/Password, Google Sign-In, & Lupa Kata Sandi) beserta manajemen profil pengguna (Edit Profil & Foto, Ganti Kata Sandi, Preferensi Mode Default, dan Hapus Akun Permanen); (2) implementasi *Hybrid AI Pipeline* pada `scanner.tsx` yang memadukan deteksi awal Roboflow Computer Vision dengan analisis visual Google Gemini Vision API (dilengkapi *multi-model fallback*, *1x auto-retry* saat server 503, `AbortController` timeout 10 detik, serta validasi objek bukan buah); (3) implementasi segmentasi Mode Bisnis (input dimensi wadah P×L×T cm) dan Mode Pribadi (input jumlah buah atau berat dengan *preset chips*); (4) visualisasi indikator lingkaran persentase kesegaran (*Circular Gauge*), estimasi harga jual & keuntungan bisnis, halaman pengingat masa simpan buah dinamis (`reminder.tsx`), serta rekomendasi resep *zero-waste* (`resep.tsx`, `resep-list.tsx` dengan resep cadangan `buildFallbackRecipes`, dan `resep-detail.tsx`); serta (5) sinkronisasi data *Hybrid Offline-First* yang memadukan cache lokal `AsyncStorage` (dengan kompresi thumbnail `createPersistentThumbnail`), penyimpanan foto Cloudinary CDN, dan basis data Cloud Firestore (`users` dan `scan_history`). Fokus tim pada periode akhir (Week 12–Week 14) adalah penyelesaian konfigurasi *Authorized Domains* Google OAuth pada domain produksi EAS Hosting, pengujian stabilitas akhir, perekaman video demo final, dan persiapan presentasi Week 14.
 
 ---
 
@@ -93,13 +93,12 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | # | Deliverable (this milestone) | Status | Evidence link |
 |---|---|---|---|
-| 1 | Full Feature Implementation (FR-01 s/d FR-10 & NFR-01 s/d NFR-05) | Done | [https://github.com/callistajb/freshia/tree/master/src](https://github.com/callistajb/freshia/tree/master/src) |
-| 2 | Firestore 5-Collection Architecture & Security Rules | Done | [src/services/firestoreService.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/services/firestoreService.ts), [firestore.rules](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/firestore.rules) |
-| 3 | Automated Unit & API Parser Tests (14 tests, 98.68% line coverage) | Done | [tests/freshia.test.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts) — [Section B11.2] |
-| 4 | Performance, Validation & Security Audit | Done | [Section B11.3] |
-| 5 | CI/CD Pipeline Automation (GitHub Actions) | Done | [.github/workflows/ci.yml](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.github/workflows/ci.yml) |
-| 6 | Staging Web Export & Production Deployment Documentation | Done | [DEPLOYMENT.md](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md) — [Section B11.4] |
-| 7 | Usability Testing & Real User Feedback Incorporation | Done | [Section B11.5] |
+| 1 | Full Feature Implementation (FR-01 s/d FR-07 & Profile/Reminder Extensions) | Done | [https://github.com/callistajb/freshia/tree/master/src/app](https://github.com/callistajb/freshia/tree/master/src/app) |
+| 2 | Hybrid AI Integration (Roboflow + Gemini Vision with Fallback) | Done | [src/app/(tabs)/scanner.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx), [src/app/resep-list.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-list.tsx) |
+| 3 | Cloud Firestore (`users`, `scan_history`) & Local `AsyncStorage` Sync | Done | [src/firebaseConfig.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/firebaseConfig.ts), [src/app/(tabs)/history.tsx](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/history.tsx) |
+| 4 | Functional, API, UI & Manual QA Testing Report | Done | [Section B11.2] & [tests/freshia.test.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts) |
+| 5 | Performance & Security Validation | Done | [Section B11.3] |
+| 6 | Web Staging Deployment (`on.expo.app`) & CI/CD Preparation | Done | [https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app](https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app) — [Section B11.4] |
 
 ---
 
@@ -107,12 +106,12 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | Task / Feature | Planned (week) | Status | % Complete | Notes / Blockers |
 |---|---|---|---|---|
-| System Design & ERD Database | W4–W5 | Done | 100% | Skema Firestore (NoSQL) diperluas menjadi 5 koleksi aktif (`users`, `scan_history`, `saved_recipes`, `reminders`, `app_feedback`). |
-| High-Fidelity UI & Clickable Prototype | W5–W6 | Done | 100% | Seluruh desain Figma telah diterjemahkan ke komponen nyata React Native (Expo Router). |
-| API Specifications & Hybrid AI Pipeline | W6–W10 | Done | 100% | Integrasi Roboflow + Google Gemini Vision API dengan *multi-model fallback* & *timeout* 10 detik selesai. |
-| Coding Implementation (React Native & Firebase) | W8–W10 | Done | 100% | Seluruh layar (Welcome, SignIn, SignUp, Scanner, Result, History, Resep, Reminder, Profile) beroperasi penuh. |
-| Testing Execution, CI/CD & Deployment Prep | W8–W11 | Done | 100% | 14 *automated tests* lulus (100% pass rate, 98.68% coverage), pipeline GitHub Actions & `DEPLOYMENT.md` siap. |
-| Closed Testing Play Store & Final Presentation | W12–W14 | Planned | 25% | Konfigurasi `app.json` dan panduan EAS Build AAB siap; eksekusi distribusi 20 tester dijadwalkan W12–W13. |
+| System Design & ERD Database | W4–W5 | Done | 100% | Skema Cloud Firestore (`users` dan `scan_history`) beserta struktur cache lokal `AsyncStorage` telah aktif digunakan. |
+| High-Fidelity UI & Clickable Prototype | W5–W6 | Done | 100% | Seluruh desain Figma telah diimplementasikan menjadi halaman React Native dengan navigasi Expo Router. |
+| API Specifications & Hybrid AI Pipeline | W6–W10 | Done | 100% | Integrasi Roboflow + Gemini Vision API lengkap dengan *multi-model fallback*, *timeout* 10s, dan `buildFallbackRecipes`. |
+| Coding Implementation (React Native & Firebase) | W8–W10 | Done | 100% | Seluruh layar utama (Welcome, SignIn, SignUp, Scanner, Result, History, Resep, Reminder, Profile, Edit Profile, Change Password) telah berfungsi. |
+| Testing Execution & Staging Deployment | W8–W11 | Done | 100% | Pengujian Unit, API, UI, & Manual QA selesai; aplikasi telah di-deploy ke staging EAS Hosting (`on.expo.app`). |
+| Final Polish, OAuth Domain Fix & Final Presentation | W12–W14 | In progress | 50% | Menambahkan domain `.on.expo.app` ke *Authorized Domains* Firebase Auth untuk login Google di web serta finalisasi materi W14. |
 
 ---
 
@@ -122,21 +121,18 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | Req. ID | Description | Feature / Module | Status | Test evidence |
 |---|---|---|---|---|
-| FR-01 | Pengguna dapat melakukan pendaftaran dan login menggunakan email/password serta Google OAuth. | Authentication (`welcome.tsx`, `signin.tsx`, `login.tsx`, `signup2.tsx`, `forgot-password.tsx`, `useGoogleAuth.ts`) | Tested | Unit test `validateEmail` & `validatePassword` di [tests/freshia.test.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts); integrasi Firebase Auth SDK v12. |
-| FR-02 | Pengguna dapat memilih mode operasional melalui toggle switch (Bisnis / Pribadi) beserta input dimensi keranjang atau berat/jumlah buah. | Core Scanner UI (`src/app/(tabs)/scanner.tsx`, `src/utils/pricingCalculator.ts`) | Tested | Unit test `validateDimensions`, `validateWeight`, `calculateEstimatedVolume` di [tests/freshia.test.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts). |
-| FR-03 | Pengguna dapat mengambil foto dari kamera perangkat atau mengunggah foto dari galeri. | Scanner Hardware UI (`src/app/(tabs)/scanner.tsx`) | Tested | Manual QA perangkat fisik (`CameraView.takePictureAsync` & `ImagePicker.launchImageLibraryAsync`). |
-| FR-04 | Sistem dapat mengirim payload gambar dan parameter input ke backend AI untuk dianalisis. | AI API Integration (`src/app/(tabs)/scanner.tsx`) | Tested | Integrasi endpoint Roboflow Detection & Gemini Vision `generateContent` dengan `AbortController`. |
-| FR-05 | Sistem AI dapat mengembalikan respons JSON berisi persentase kelayakan, estimasi nilai sisa (Rp), prediksi masa simpan, dan saran resep zero-waste. | AI Parser & Calculator (`src/utils/aiParser.ts`, `src/utils/pricingCalculator.ts`) | Tested | Unit test `parseGeminiResponse` (clean JSON, markdown fence stripping, clamping 0–100) & `calculateSalvageValue`. |
-| FR-06 | Sistem merender respons JSON ke dalam bentuk Pie/Donut Chart dan kartu informasi tekstual serta alur resep olahan. | Result & Recipe UI (`src/app/result.tsx`, `resep-list.tsx`, `resep-detail.tsx`, `src/app/(tabs)/resep.tsx`) | Tested | Render dinamis SVG Donut Chart, kartu estimasi laba, fallback resep (`buildFallbackRecipes`), & simpan resep favorit. |
-| FR-07 | Pengguna dapat melihat daftar riwayat (log history) hasil pemindaian sebelumnya dan memfilter status kesegaran. | History & Dashboard Log (`src/app/(tabs)/history.tsx`, `src/app/(tabs)/index.tsx`, `src/utils/statsCalculator.ts`) | Tested | Unit test `calculateDashboardStats` di [tests/freshia.test.ts](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts); sinkronisasi AsyncStorage & Firestore. |
-| FR-08 | *(Added W10)* Pengguna dapat mengelola profil (ubah nama & foto profil), mengganti kata sandi, mengatur preferensi mode default, mengirim feedback, dan menghapus akun. | Profile Management (`src/app/(tabs)/profile.tsx`, `edit-profile.tsx`, `change-password.tsx`) | Tested | Manual QA: re-autentikasi ganti sandi, kompresi avatar Base64, modal feedback ke koleksi `app_feedback`, & hapus akun. |
-| FR-09 | *(Added W11)* Sistem memantau masa simpan buah secara dinamis berdasarkan tanggal pindai dan menyediakan halaman Pengingat Buah (*Reminder*). | Shelf-Life Reminder (`src/app/reminder.tsx`, `src/services/firestoreService.ts`) | Tested | Kalkulasi dinamis `calculateDynamicShelfLife`, tips penyimpanan spesifik buah, & sinkronisasi ke koleksi `reminders`. |
-| FR-10 | *(Added W11)* Pengguna pada Mode Pribadi dapat memilih input berdasarkan Jumlah Buah (preset 1, 2, 3, 5, 10 buah) selain Berat (gram/kg). | Household Quantity Input (`src/app/(tabs)/scanner.tsx`) | Tested | Validasi toggle kuantitas Mode Pribadi dan injeksi parameter `jumlahBuah` ke *prompt* Gemini AI. |
-| NFR-01 | Waktu pemrosesan pengiriman gambar (Base64) hingga hasil render dashboard selesai maksimal 8 detik pada koneksi 4G standar. | Performance & Image Compression (`scanner.tsx`) | Tested | Rata-rata latensi aktual **3.24 detik** berkat kompresi gambar kualitas 0.3 (~180 KB) dan *background cloud upload*. |
-| NFR-02 | Kunci API (Firebase, Roboflow, Cloudinary, Gemini) diisolasi dalam environment variables (`.env`) dan koneksi wajib menggunakan HTTPS. | Security & Config (`.gitignore`, `DEPLOYMENT.md`) | Tested | Audit statis repositori: `.env` masuk `.gitignore`, seluruh endpoint memakai `https://`. |
-| NFR-03 | Navigasi aplikasi bersifat *minimalist linear*; pengguna baru dapat menyelesaikan tugas inti (scan foto) dalam maksimal 3 kali klik. | Core UI/UX (`src/app/(tabs)/_layout.tsx`) | Tested | Usability walkthrough: Klik Tab Scanner (1) $\rightarrow$ Klik Shutter Kamera (2) $\rightarrow$ Hasil Analisis tampil otomatis. |
-| NFR-04 | Layanan penyimpanan riwayat (database) memiliki uptime 99.9% menggunakan infrastruktur cloud terkelola (*managed cloud database*). | Reliability (`src/firebaseConfig.ts`, `src/services/firestoreService.ts`) | Tested | Arsitektur *Offline-First* (`AsyncStorage`) yang disinkronisasikan ke Google Cloud Firestore multi-region. |
-| NFR-05 | Antarmuka pengguna bersifat responsif, berfungsi pada perangkat seluler mulai dari OS Android 10 (API Level 29) ke atas, dan siap di-build untuk iOS/Web. | Cross-Platform Compatibility (`app.json`, `tsconfig.json`) | Tested | Lulus `npx tsc --noEmit` (0 error), `npx expo export -p web`, dan pengujian perangkat fisik Android via Expo. |
+| FR-01 | Pengguna dapat melakukan pendaftaran dan login menggunakan email/password serta Google OAuth. | Authentication (`welcome.tsx`, `signin.tsx`, `login.tsx`, `signup2.tsx`, `forgot-password.tsx`, `useGoogleAuth.ts`) | Tested | Uji fungsional registrasi 2 tahap, login Email/Password, reset password via email Firebase, dan login Google (`Section B11.2`). |
+| FR-02 | Pengguna dapat memilih mode operasional melalui toggle switch (Bisnis / Pribadi) beserta input dimensi wadah (P×L×T) atau berat/jumlah buah. | Core Scanner UI (`src/app/(tabs)/scanner.tsx`) | Tested | Uji pemilihan Mode Bisnis (input P×L×T cm) & Mode Pribadi (toggle Jumlah Buah vs Berat dengan *preset chips*) serta sinkronisasi `@freshia_default_mode`. |
+| FR-03 | Pengguna dapat mengambil foto dari kamera perangkat atau mengunggah foto dari galeri. | Scanner Hardware UI (`src/app/(tabs)/scanner.tsx`) | Tested | Uji perangkat keras kamera (`CameraView.takePictureAsync`) dan pemilih galeri (`ImagePicker.launchImageLibraryAsync`). |
+| FR-04 | Sistem dapat mengirim payload gambar Base64 dan parameter input ke backend AI untuk dianalisis. | AI API Integration (`src/app/(tabs)/scanner.tsx`) | Tested | Uji pengiriman payload Base64 ke endpoint Roboflow Detection dan Google Gemini `generateContent` dengan `AbortController` 10 detik. |
+| FR-05 | Sistem AI dapat mengembalikan respons JSON berisi persentase kelayakan, estimasi nilai sisa (Rp), prediksi masa simpan, dan saran resep *zero-waste*. | AI Reasoning & Parser (`src/app/(tabs)/scanner.tsx`, `src/utils/aiParser.ts`) | Tested | Uji skema JSON Gemini (`detectedFruitName`, `freshnessPercentage`, `salvageValue`, `shelfLife`, `recipe`), deteksi objek "Bukan Buah", & fallback 503. |
+| FR-06 | Sistem merender respons JSON ke dalam bentuk indikator lingkaran persentase kesegaran dan kartu informasi tekstual serta alur resep olahan. | Result & Recipe UI (`src/app/result.tsx`, `src/app/(tabs)/resep.tsx`, `src/app/resep-list.tsx`, `src/app/resep-detail.tsx`) | Tested | Uji render dinamis *Circular Gauge* & warna status (Sangat Segar/Cukup Segar/Hampir Busuk/Bukan Buah), estimasi laba bisnis, & daftar resep Makanan/Minuman. |
+| FR-07 | Pengguna dapat melihat daftar riwayat (*log history*) hasil pemindaian sebelumnya, memfilter kategori, melihat pengingat masa simpan, dan mengelola profil. | History, Reminder & Profile (`src/app/(tabs)/history.tsx`, `src/app/reminder.tsx`, `src/app/(tabs)/profile.tsx`, `edit-profile.tsx`, `change-password.tsx`) | Tested | Uji pencarian & filter riwayat (Terbaru/Diproses/Butuh Perhatian), hitung mundur sisa hari di `reminder.tsx`, statistik dampak di `profile.tsx`, & sinkronisasi Firestore (`scan_history` & `users`). |
+| NFR-01 | Waktu pemrosesan pengiriman gambar (Base64) hingga hasil render selesai maksimal 8 detik pada koneksi 4G standar. | Performance & Compression (`src/app/(tabs)/scanner.tsx`) | Tested | Rata-rata waktu analisis AI **3.2–4.5 detik** dengan kompresi kualitas foto `0.4`–`0.5`, batas timeout 10 detik, dan *background upload* ke Cloudinary/Firestore. |
+| NFR-02 | Kunci API (Roboflow, Cloudinary, Gemini) diisolasi dalam environment variables (`.env`) dan koneksi wajib menggunakan HTTPS. | Security (`.gitignore`, `src/app/(tabs)/scanner.tsx`) | Tested | Pemeriksaan kode sumber: variabel `process.env.EXPO_PUBLIC_*` dimuat dari `.env` yang terdaftar di `.gitignore`, seluruh endpoint memakai `https://`. |
+| NFR-03 | Navigasi aplikasi bersifat *minimalist linear*; pengguna baru dapat menyelesaikan tugas inti (scan foto) dalam maksimal 3 kali klik. | Core UI/UX (`src/app/(tabs)/_layout.tsx`) | Tested | Verifikasi alur pengguna: Buka Tab Scanner (1) $\rightarrow$ Jepret/Pilih Foto & Klik Analisis (2) $\rightarrow$ Layar Hasil Analisis terbuka otomatis. |
+| NFR-04 | Layanan penyimpanan riwayat (database) memiliki uptime 99.9% menggunakan infrastruktur cloud terkelola (*managed cloud database*). | Reliability (`src/firebaseConfig.ts`, `AsyncStorage`) | Tested | Penyimpanan berlapis *Offline-First* di `AsyncStorage` (`@freshia_history`) yang disinkronisasikan ke Google Cloud Firestore (`scan_history` & `users`). |
+| NFR-05 | Antarmuka pengguna bersifat responsif, berfungsi pada perangkat seluler mulai dari OS Android 10 (API Level 29) ke atas, dan dapat diakses di Web. | Compatibility (`app.json`, `tsconfig.json`) | Tested | Lulus kompilasi TypeScript `npx tsc --noEmit` (0 error), berhasil di-deploy ke Web (`on.expo.app`), dan berjalan pada perangkat Android via Expo Go. |
 
 ---
 
@@ -144,12 +140,10 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | ID | Risk / Issue | Likelihood | Impact | Mitigation | Status |
 |---|---|---|---|---|---|
-| R-01 | Keterbatasan kuota harian atau *server overload* (HTTP 503 / 404) pada Gemini Vision API *free-tier* saat pengujian. | M | H | Mengimplementasikan *multi-model fallback chain* (`gemini-2.5-flash` $\rightarrow$ `gemini-2.0-flash` $\rightarrow$ `gemini-1.5-flash`) serta generator resep cadangan lokal (`buildFallbackRecipes`) agar aplikasi tidak pernah gagal merender hasil. | Resolved |
-| R-02 | Risiko inkonsistensi antara purwarupa UI statis Figma dengan implementasi struktur komponen kode React Native. | M | M | Menyusun komponen terstandarisasi dengan palet warna tema (`#C8201B`, `#9A1B17`, `#FFFBFB`) dan memverifikasi kesesuaian visual setiap layar terhadap mockup Figma. | Resolved |
-| R-03 | Perubahan struktur database saat dihubungkan ke fitur-fitur baru pada UI. | L | M | Memusatkan seluruh operasi CRUD pada modul layanan `src/services/firestoreService.ts` dengan 5 koleksi terstruktur (`users`, `scan_history`, `saved_recipes`, `reminders`, `app_feedback`). | Resolved |
-| R-04 | Galat memori Android `Row too big to fit into CursorWindow` saat menyimpan banyak riwayat foto beresolusi tinggi ke `AsyncStorage`. | M | H | Membuat fungsi kompresi thumbnail (`createPersistentThumbnail` lebar 320px, kualitas 0.45) dan membatasi cache lokal maksimal 50 entri terbaru, sementara gambar penuh disimpan di Cloudinary CDN. | Resolved |
-| R-05 | Kegagalan inisialisasi Google OAuth pada perangkat Android (`Client Id property androidClientId must be defined`). | H | H | Mengonfigurasi `Google.useAuthRequest()` pada `src/hooks/useGoogleAuth.ts` dengan menyertakan `androidClientId`, `iosClientId`, dan `webClientId` serta skema *redirect URI* `freshia://`. | Resolved |
-| R-06 | Penolakan akses tulis (`PERMISSION_DENIED`) pada koleksi baru Firestore (`saved_recipes`, `reminders`, `app_feedback`). | M | M | Menyusun aturan keamanan `firestore.rules` yang mengizinkan operasi baca/tulis terautentikasi (`request.auth != null`) pada seluruh 5 koleksi database. | Resolved |
+| R-01 | Keterbatasan kuota harian atau lonjakan trafik server (HTTP 503 / 429) pada Google Gemini Vision API *free-tier* saat pemindaian atau pemuatan resep. | H | H | Mengimplementasikan mekanisme *1x auto-retry* dengan jeda 1.2 detik, *multi-model fallback chain* (`gemini-3.5-flash-lite` $\rightarrow$ `gemini-3.8-flash` $\rightarrow$ `gemini-2.5-flash`), fallback hasil deteksi Roboflow di `scanner.tsx`, serta fungsi resep cadangan lokal `buildFallbackRecipes()` di `resep-list.tsx`. | Resolved |
+| R-02 | Risiko inkonsistensi antara purwarupa UI statis Figma dengan implementasi komponen kode React Native di berbagai ukuran layar. | M | M | Menerapkan styling komponen terstandarisasi sesuai palet warna Figma (`#C8201B`, `#9A1B17`, `#FFFBFB`, `#FCE8E8`) dan penyesuaian *responsive layout* untuk Mobile & Web. | Resolved |
+| R-03 | Perubahan atau kegagalan sinkronisasi gambar antara memori lokal perangkat dengan database Cloud Firestore. | M | H | Menerapkan fungsi kompresi `createPersistentThumbnail` (maksimal dimensi 320px, JPEG 0.55) agar gambar tersimpan permanen dalam format Base64 ringan di `AsyncStorage` & Firestore tanpa melebihi batas dokumen 1 MB, ditambah dukungan upload `secure_url` Cloudinary. | Resolved |
+| R-04 | Penolakan login Google OAuth (`auth/unauthorized-domain`) saat aplikasi diakses melalui domain web staging baru (`*.on.expo.app`). | M | M | Mendaftarkan domain deployment EAS Hosting (`c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app`) ke dalam daftar *Authorized Domains* pada Firebase Authentication Console serta menyediakan metode login Email/Password yang berjalan stabil di semua domain. | Active / Mitigated |
 
 ---
 
@@ -157,11 +151,11 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | Type | Link / Location | What it proves |
 |---|---|---|
-| Repository | [https://github.com/callistajb/freshia](https://github.com/callistajb/freshia) | Basis kode sumber lengkap React Native (Expo SDK 58), riwayat *commit* kolaboratif tim, dan struktur modul. |
-| CI/CD | [.github/workflows/ci.yml](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.github/workflows/ci.yml) | Otomatisasi *typecheck* TypeScript (`npx tsc --noEmit`), eksekusi 14 *unit tests* (`npm test`), dan kompilasi *web bundle*. |
-| Demo video | [Video Demo & Prototype - Google Drive](https://drive.google.com/drive/u/1/folders/1Rtx8vcFouAr24ruxdyIAZIxu2TrR-2sb) | Rekaman demonstrasi alur kerja aplikasi dan simulasi navigasi end-to-end. |
-| Screenshots | [Figma High-Fidelity Design & UI](https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=0-1) | Dokumentasi visual antarmuka pengguna (Sign In, Scanner, Result Analytics, History, Resep, Reminder, Profile). |
-| Deployed app | Staging Web Bundle (`npx expo export -p web` $\rightarrow$ `dist/`) & Panduan EAS Build di [DEPLOYMENT.md](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md) | Kesiapan kompilasi lintas platform (Web & Android App Bundle `.aab` untuk rilis W14). |
+| Repository | [https://github.com/callistajb/freshia](https://github.com/callistajb/freshia) | Basis kode sumber lengkap aplikasi Freshia (React Native / Expo SDK 58) dan riwayat *commit* kolaboratif seluruh anggota kelompok. |
+| CI/CD | [https://github.com/callistajb/freshia/blob/master/.github/workflows/ci.yml](https://github.com/callistajb/freshia/blob/master/.github/workflows/ci.yml) | Konfigurasi GitHub Actions untuk otomatisasi pengecekan TypeScript (`npx tsc --noEmit`), pengujian unit (`npm test`), dan ekspor bundel web (`npx expo export -p web`). |
+| Demo video | [https://drive.google.com/drive/u/1/folders/1Rtx8vcFouAr24ruxdyIAZIxu2TrR-2sb](https://drive.google.com/drive/u/1/folders/1Rtx8vcFouAr24ruxdyIAZIxu2TrR-2sb) | Dokumentasi video demonstrasi alur penggunaan aplikasi. |
+| Screenshots | [https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=0-1](https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=0-1) | Rancangan antarmuka acuan dan dokumentasi tampilan layar aplikasi (Login, Scanner, Result, History, Resep, Reminder, Profile). |
+| Deployed app | [https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app](https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app) | Aplikasi web staging yang telah di-deploy menggunakan Expo EAS Hosting dan terhubung langsung ke Firebase `freshia-5`. |
 
 ---
 
@@ -169,10 +163,10 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | Member | Tasks completed | Hours (approx.) | Notes |
 |---|---|---|---|
-| Callista Jasmine Bandono (00000110963) | Merancang dan mengimplementasikan layanan terpusat 5 koleksi Cloud Firestore (`firestoreService.ts` & `firestore.rules`), penambahan fitur input kuantitas jumlah buah Mode Pribadi di `scanner.tsx`, integrasi fitur simpan resep & feedback, konfigurasi pipeline CI/CD GitHub Actions (`ci.yml`), serta penyusunan `DEPLOYMENT.md` dan laporan Milestone Week 11. | 28 | Lead on System Architecture, Firestore Backend & CI/CD |
-| Alya Azzahra (00000109443) | Mengimplementasikan alur autentikasi lengkap (`welcome.tsx`, `signin.tsx`, `login.tsx`, `signup2.tsx`, `forgot-password.tsx`), perbaikan modul Google OAuth lintas platform (`useGoogleAuth.ts`), modul validasi input (`validation.ts`), serta pelaksanaan pengujian unit & audit keamanan. | 26 | Lead on Authentication, QA Testing & Security Validation |
-| Alya Virgia Aurelline (00000111025) | Mengimplementasikan halaman Dashboard (`(tabs)/index.tsx`), History Log beserta filter kategorikal (`(tabs)/history.tsx`), halaman Reminder masa simpan buah dinamis (`reminder.tsx`), kalkulator statistik (`statsCalculator.ts`), serta pengujian antarmuka pengguna. | 26 | Lead on Frontend UI/UX, History Caching & Reminder Flow |
-| Rio Hawari Putra Hakim (00000109470) | Mengintegrasikan *Hybrid AI Pipeline* (Roboflow + Gemini Vision dengan *multi-model fallback* & *timeout*) di `scanner.tsx`, kompresi thumbnail persisten, halaman hasil analitik Donut Chart (`result.tsx`), alur resep & *resilient fallback* (`resep-list.tsx`, `resep-detail.tsx`), serta fitur pengaturan profil (`profile.tsx`, `edit-profile.tsx`, `change-password.tsx`). | 28 | Lead on AI Vision Integration, Camera Pipeline & Profile Features |
+| Callista Jasmine Bandono (00000110963) | Mengoordinasikan arsitektur penyimpanan Firebase (`firebaseConfig.ts` & sinkronisasi Firestore `users` / `scan_history`), penambahan fitur toggle input Jumlah Buah vs Berat dengan *preset chips* pada Mode Pribadi di `scanner.tsx`, konfigurasi CI/CD & dokumentasi deployment, serta penyusunan laporan Milestone Week 11. | 26 | Lead on System Architecture, Database Sync & Documentation |
+| Alya Azzahra (00000109443) | Mengimplementasikan alur autentikasi pengguna (`welcome.tsx`, `signin.tsx`, `login.tsx`, `signup2.tsx`, `forgot-password.tsx`, `useGoogleAuth.ts`), pengujian skenario validasi input & keamanan kredensial (`.env`), serta pemutakhiran *Risks & Issues Log* dan *Bug List*. | 25 | Lead on Authentication, QA Testing & Risk Management |
+| Alya Virgia Aurelline (00000111025) | Mengimplementasikan antarmuka Dashboard Home (`(tabs)/index.tsx`), halaman Riwayat Scan beserta pencarian dan filter status kesegaran (`(tabs)/history.tsx`), halaman Pengingat Masa Simpan Buah (`reminder.tsx`), serta kesesuaian UI dengan Figma. | 25 | Lead on Frontend UI/UX, History & Reminder Screen |
+| Rio Hawari Putra Hakim (00000109470) | Mengintegrasikan kamera & *Hybrid AI Pipeline* (Roboflow + Gemini Vision dengan rubrik kesegaran ketat, *timeout* 10s, & *fallback*) di `scanner.tsx`, kompresi `createPersistentThumbnail`, halaman Hasil Analisis (`result.tsx`), halaman Resep AI & `buildFallbackRecipes` (`resep.tsx`, `resep-list.tsx`, `resep-detail.tsx`), serta fitur Profil (`profile.tsx`, `edit-profile.tsx`, `change-password.tsx`). | 28 | Lead on AI Vision Pipeline, Recipe Flow & Profile Settings |
 
 ---
 
@@ -182,10 +176,10 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 
 | Commitment | Owner | Target week |
 |---|---|---|
-| Eksekusi cloud build produksi Android App Bundle (`.aab`) melalui EAS Build dan pendaftaran rilis pada Google Play Console. | Rio Hawari Putra Hakim & Callista Jasmine Bandono | W12 |
-| Distribusi *Closed Testing Track* kepada minimal 20 penguji internal terverifikasi dan pengumpulan metrik stabilitas perangkat fisik. | Alya Azzahra & Alya Virgia Aurelline | W12–W13 |
-| Publikasi halaman statis *Privacy Policy* & *Terms of Support* ke URL publik serta penyempurnaan *edge cases* konektivitas offline. | Callista Jasmine Bandono & Rio Hawari Putra Hakim | W13 |
-| Perekaman video demo produksi akhir, penyusunan laporan final Milestone Week 14 (B14.1–B14.7), dan gladi bersih presentasi akhir. | All Members | W14 |
+| Menambahkan domain deployment EAS Hosting (`*.on.expo.app`) ke daftar *Authorized Domains* di Firebase Console agar fitur Login Google berfungsi penuh di web produksi. | Callista Jasmine Bandono & Alya Azzahra | W12 |
+| Melakukan pengujian stabilitas akhir lintas perangkat (Mobile Expo Go & Web Browser) serta merapikan tampilan responsif antarmuka. | Alya Virgia Aurelline & Rio Hawari Putra Hakim | W12–W13 |
+| Merekam video demonstrasi aplikasi final (3–5 menit) sebagai bukti fungsionalitas *end-to-end* dan *backup* saat *live demo*. | Alya Virgia Aurelline & Alya Azzahra | W13 |
+| Menyusun dokumen laporan akhir Milestone Week 14 (Bagian B14.1–B14.7), materi slide presentasi, dan gladi bersih presentasi tim. | All Members | W14 |
 
 ---
 
@@ -204,29 +198,29 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 - **Business value:**  
   FRESHIA memberikan nilai ekonomi langsung berupa penyelamatan modal bagi pelaku bisnis dengan mengonversi stok yang menurun kualitasnya (*deadstock*) menjadi pendapatan alternatif (penjualan produk *grade B*), serta memberikan nilai keberlanjutan (*sustainability*) di tingkat pengguna pribadi dengan menekan volume limbah makanan konsumsi harian (*zero-waste*).
 - **Success metrics:**  
-  Mencapai kriteria rilis *Closed Testing* Google Play Store dengan minimal 20 *internal testers* aktif selama 14 hari, tingkat keberhasilan penyelesaian satu siklus scan (dari buka kamera hingga hasil analitik muncul) di bawah 2 menit, serta rata-rata waktu respons API AI (*latency*) di bawah 8 detik bergantung pada koneksi internet.
+  Mencapai tingkat keberhasilan penyelesaian satu siklus scan (dari buka kamera hingga hasil analitik muncul) di bawah 2 menit, rata-rata waktu respons API AI (*latency*) di bawah 8 detik bergantung pada koneksi internet, serta aplikasi dapat diakses dan diuji secara publik oleh pengguna akhir dan dosen penguji.
 - **Stakeholders:**  
-  Pengguna akhir (pelaku bisnis buah dan pengguna pribadi), dosen penguji program studi Informatika Universitas Multimedia Nusantara (sebagai evaluator arsitektur dan *business value*), serta tim *reviewer* Google Play Store (memastikan kepatuhan kebijakan publikasi).
+  Pengguna akhir (pelaku bisnis buah dan pengguna pribadi) serta dosen penguji program studi Informatika Universitas Multimedia Nusantara (sebagai evaluator arsitektur dan *business value*).
 
 ### B3.2 Scope
 
 | In scope | Out of scope (explicitly) |
 |---|---|
-| Registrasi dan login pengguna menggunakan otentikasi pihak ketiga | Fitur e-commerce, marketplace, atau transaksi jual-beli antar pengguna |
-| Pengambilan gambar melalui antarmuka kamera bawaan aplikasi | Pemrosesan Computer Vision secara lokal (*on-device ML rendering*) |
-| Analisis gambar berbasis cloud menggunakan Vision-Language Model | Integrasi Payment Gateway atau dompet digital |
-| Dashboard Analytics (visualisasi estimasi jumlah, grade, prediksi umur) | Sistem chatting, forum diskusi, atau interaksi sosial antar pengguna |
+| Registrasi dan login pengguna menggunakan otentikasi Firebase (Email/Password & Google) | Fitur e-commerce, marketplace, atau transaksi jual-beli antar pengguna |
+| Pengambilan gambar melalui antarmuka kamera bawaan aplikasi atau unggah galeri | Pemrosesan Computer Vision secara lokal (*on-device ML rendering*) |
+| Analisis gambar berbasis cloud menggunakan Vision-Language Model (Roboflow & Gemini) | Integrasi Payment Gateway atau dompet digital |
+| Dashboard Analytics (visualisasi persentase kesegaran, estimasi nilai sisa, prediksi umur, & resep) | Sistem chatting, forum diskusi, atau interaksi sosial antar pengguna |
 
 ### B3.3 Functional Requirements (FR)
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-01 | Pengguna dapat melakukan pendaftaran dan login menggunakan email dan password. | Must |
-| FR-02 | Pengguna dapat memilih mode operasional melalui toggle switch: Mode Bisnis (input dimensi keranjang/stok massal) atau Mode Pribadi (input estimasi berat konsumsi harian). | Must |
+| FR-01 | Pengguna dapat melakukan pendaftaran dan login menggunakan email dan password (serta opsi login Google). | Must |
+| FR-02 | Pengguna dapat memilih mode operasional melalui toggle switch: Mode Bisnis (input dimensi keranjang/stok massal) atau Mode Pribadi (input estimasi berat/jumlah konsumsi harian). | Must |
 | FR-03 | Pengguna dapat mengambil foto dari kamera perangkat atau mengunggah foto dari galeri. | Must |
 | FR-04 | Sistem dapat mengirim payload gambar dan parameter input ke backend AI untuk dianalisis. | Must |
 | FR-05 | Sistem AI dapat mengembalikan respons JSON yang berisi persentase kelayakan, estimasi nilai sisa (Rp), prediksi masa simpan (*predictive shelf-life*), dan saran resep *zero-waste*. | Must |
-| FR-06 | Sistem merender respons JSON ke dalam bentuk Pie Chart dan kartu informasi tekstual. | Must |
+| FR-06 | Sistem merender respons JSON ke dalam bentuk grafik lingkaran persentase kesegaran dan kartu informasi tekstual. | Must |
 | FR-07 | Pengguna dapat melihat daftar riwayat (*log history*) hasil pemindaian sebelumnya. | Should |
 
 ### B3.4 Non-Functional Requirements (NFR)
@@ -234,92 +228,91 @@ Pada milestone Week 11 ini, tim FRESHIA telah berhasil menyelesaikan transisi pe
 | ID | Category | Requirement |
 |---|---|---|
 | NFR-01 | Performance | Waktu pemrosesan pengiriman gambar (Base64) hingga hasil render dashboard selesai maksimal 8 detik pada koneksi 4G standar. |
-| NFR-02 | Security | Kunci API (Firebase & Gemini) diisolasi dalam environment variables (`.env`) dan tidak terekspos di dalam repositori publik. Koneksi wajib menggunakan HTTPS. |
+| NFR-02 | Security | Kunci API (Roboflow, Cloudinary, & Gemini) diisolasi dalam environment variables (`.env`) dan tidak terekspos di dalam repositori publik. Koneksi wajib menggunakan HTTPS. |
 | NFR-03 | Usability | Navigasi aplikasi bersifat *minimalist linear*; pengguna baru dapat menyelesaikan tugas inti (scan foto) dalam maksimal 3 kali klik. |
 | NFR-04 | Reliability | Layanan penyimpanan riwayat (database) memiliki uptime 99.9% menggunakan infrastruktur cloud terkelola (*managed cloud database*). |
-| NFR-05 | Compatibility | Antarmuka pengguna bersifat responsif, berfungsi pada perangkat seluler mulai dari OS Android 10 (API Level 29) ke atas, dan arsitektur siap di-build untuk platform iOS. |
+| NFR-05 | Compatibility | Antarmuka pengguna bersifat responsif, berfungsi pada perangkat seluler mulai dari OS Android 10 (API Level 29) ke atas, serta dapat dijalankan di platform iOS dan Web. |
 
 ### B3.5 User Stories
 
-- **As a** [Pelaku Bisnis], **I want to** [memotret keranjang buah dan menginput dimensi panjang × lebar × tingginya], **so that** [sistem AI dapat mengestimasi jumlah buah yang mulai layu dan memproyeksikan nilai jual sisa (*salvage value*) agar saya tidak kehilangan seluruh modal].
-- **As a** [Pengguna Pribadi], **I want to** [memotret kantong buah sisa di kulkas dan memasukkan berat belinya], **so that** [saya dapat mengetahui prediksi sisa hari kelayakan konsumsi serta mendapatkan panduan resep olahan spesifik agar buah tersebut tidak berujung di tempat sampah].
+- **As a** [Pelaku Bisnis], **I want to** [memotret keranjang buah dan menginput dimensi panjang × lebar × tingginya], **so that** [sistem AI dapat mengestimasi tingkat kesegaran buah dan memproyeksikan nilai jual sisa (*salvage value*) serta estimasi keuntungan agar saya tidak kehilangan seluruh modal].
+- **As a** [Pengguna Pribadi], **I want to** [memotret buah di rumah/kulkas dan memasukkan jumlah atau beratnya], **so that** [saya dapat mengetahui prediksi sisa hari kelayakan konsumsi serta mendapatkan panduan resep olahan spesifik agar buah tersebut tidak berujung di tempat sampah].
 
 ### B3.6 Acceptance Criteria (final product)
 
-- Aplikasi berhasil dikompilasi dalam format AAB (*Android App Bundle*) dan didistribusikan melalui *Closed Testing Track* di Google Play Console dengan minimal 20 penguji terverifikasi.
-- Integrasi sistem kamera dan akses sistem file (*gallery*) berfungsi penuh pada pengujian perangkat keras fisik (bukan hanya emulator).
-- Alur kerja utama (FR-02 hingga FR-06) berjalan tanpa kegagalan kritis (*crash*), dan mampu memetakan hasil *response* JSON dari endpoint API menjadi elemen antarmuka grafis secara akurat.
-- Terdapat laman statis *Privacy Policy* dan *Terms of Support* publik yang dapat diakses secara online sebagai syarat mutlak kepatuhan tinjauan Play Store.
-- Tidak terdapat kredensial rahasia (*hardcoded secrets*) di basis kode kontrol versi (GitHub/GitLab).
+- Aplikasi berhasil di-build dan di-deploy sehingga dapat diakses secara langsung melalui URL Web Produksi (`*.on.expo.app`) maupun dijalankan pada perangkat fisik seluler melalui Expo.
+- Integrasi sistem kamera (`expo-camera`) dan akses galeri (`expo-image-picker`) berfungsi penuh pada pengujian perangkat fisik maupun browser.
+- Alur kerja utama (FR-01 hingga FR-07) berjalan tanpa kegagalan kritis (*crash*), dilengkapi penanganan objek bukan buah dan *fallback* saat server AI sibuk, serta mampu memetakan hasil *response* JSON dari endpoint API menjadi elemen antarmuka grafis secara akurat.
+- Tidak terdapat kredensial rahasia API (*hardcoded secrets* Gemini/Roboflow/Cloudinary) yang terekspos di repositori GitHub.
 
 ### B3.7 Tech Stack & Justification
 
 | Layer | Technology | Why this choice? |
 |---|---|---|
-| Frontend | React Native (via Expo Framework) | React Native (Expo) dipilih karena ekosistem *library* JavaScript/TypeScript yang matang, sistem navigasi berbasis file (*Expo Router*), dan kapabilitas *cloud builds* via EAS (*Expo Application Services*) yang mempercepat *deployment* Android & iOS. |
-| Backend & Auth | Firebase Authentication | Implementasi otentikasi identitas yang tangguh (Email/Password & Google Sign-In) tanpa perlu menyusun sistem manajemen sesi, enkripsi kata sandi, dan pengelolaan token dari awal (*free tier*). |
-| Database | Cloud Firestore (Firebase) & AsyncStorage | Pendekatan NoSQL *document-based* sangat ideal untuk menyimpan respons JSON dinamis dari AI, riwayat scan, resep tersimpan, pengingat, serta feedback pengguna secara *real-time* yang dipadukan dengan *caching* lokal `AsyncStorage`. |
-| AI Integration | Roboflow API & Google Gemini API (Vision) | Memadukan deteksi objek cepat Roboflow dengan kapabilitas *Vision-Language Model* Google Gemini untuk mengekstrak estimasi spasial, persentase kesegaran, nilai sisa ekonomis, dan resep ke dalam JSON terstruktur. |
-| Hosting & CI/CD | Cloudinary CDN + GitHub Actions | Cloudinary untuk penyimpanan media gambar berbasis URL ringan; GitHub Actions untuk otomatisasi *typecheck*, *unit testing*, dan validasi *build* pada setiap *push*. |
+| Frontend | React Native (via Expo Framework SDK 58 & Expo Router) | Memungkinkan satu basis kode TypeScript dijalankan di Android, iOS, dan Web sekaligus, dengan sistem *file-based routing* (`src/app/`) dan kemudahan deployment via EAS Hosting. |
+| Backend & Auth | Firebase Authentication | Menyediakan manajemen autentikasi pengguna yang aman (Email/Password, Reset Password, dan Google OAuth) lengkap dengan pengelolaan token sesi otomatis (*free tier*). |
+| Database & Storage | Cloud Firestore, AsyncStorage & Cloudinary CDN | Firestore (NoSQL) menyimpan profil pengguna (`users`) dan riwayat pemindaian (`scan_history`) secara fleksibel; `AsyncStorage` menyediakan akses *offline-first* yang instan di perangkat; Cloudinary menyimpan file gambar menjadi URL ringan. |
+| AI Integration | Roboflow Detection API & Google Gemini Vision API | Memadukan deteksi objek awal Roboflow dengan kemampuan analisis visual mendalam dari Google Gemini Vision untuk menilai kondisi kulit buah, menghitung nilai jual sisa (Rp), masa simpan, dan menyusun resep dalam format JSON. |
+| Hosting & CI/CD | Expo EAS Hosting (`on.expo.app`) + GitHub Actions | EAS Hosting menyediakan hosting web terintegrasi untuk aplikasi Expo Router; GitHub Actions mengotomatisasi pengecekan kode TypeScript dan pengujian pada setiap *push*. |
 
 ### B3.8 High-Level Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Client["Mobile Client: React Native / Expo"]
-        UI["Screens & Components\n(Expo Router)"]
-        LocalCache["AsyncStorage\n(Offline-First Cache)"]
+    subgraph Client["Mobile & Web Client: React Native / Expo"]
+        UI["Screens & Navigation\n(src/app/ - Expo Router)"]
+        LocalCache["AsyncStorage\n(@freshia_history & preferences)"]
     end
 
-    subgraph Cloud["Backend & Cloud Services"]
+    subgraph Cloud["Firebase & Media Cloud"]
         Auth["Firebase Authentication\n(Email & Google OAuth)"]
-        Firestore["Cloud Firestore\n(5 Collections)"]
-        Cloudinary["Cloudinary CDN\n(Image Storage)"]
+        Firestore["Cloud Firestore\n(users & scan_history)"]
+        Cloudinary["Cloudinary CDN\n(Image Upload)"]
     end
 
-    subgraph AI["Hybrid AI Engine"]
-        Roboflow["Roboflow Object Detection API"]
-        Gemini["Google Gemini Vision API\n(Multi-Model Fallback)"]
+    subgraph AI["Hybrid AI Services"]
+        Roboflow["Roboflow API\n(Initial Fruit Detection)"]
+        Gemini["Google Gemini Vision API\n(Freshness, Salvage Value & Recipes)"]
     end
 
-    UI -->|1. Login / Session| Auth
-    UI -->|2. Read/Write Instant Cache| LocalCache
-    UI -->|3. Send Compressed Base64| Roboflow
-    Roboflow -->|4. Fruit Class Label| UI
-    UI -->|5. Image + Mode Params + Label| Gemini
-    Gemini -->|6. Structured JSON Analysis| UI
-    UI -->|7. Background Image Upload| Cloudinary
+    UI -->|1. Auth & Session| Auth
+    UI -->|2. Instant Local Read/Write| LocalCache
+    UI -->|3. Send Base64 Image| Roboflow
+    Roboflow -->|4. Return Class & Confidence| UI
+    UI -->|5. Image + Mode Params + Prompt| Gemini
+    Gemini -->|6. Return JSON Analysis| UI
+    UI -->|7. Background Upload| Cloudinary
     Cloudinary -->|8. Return secure_url| UI
-    UI -->|9. Sync Records & Preferences| Firestore
+    UI -->|9. Sync Profile & History| Firestore
 ```
 
 ### B3.9 UI Wireframes / Mockups
 
 Link Figma: [https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=0-1&t=RGLm2BFj88Wm5Zfg-1](https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=0-1&t=RGLm2BFj88Wm5Zfg-1)
 
-- **Sign In Screen:** Menampilkan logo Freshia di atas latar gradasi merah tua, input Email dan Kata Sandi, tombol Login, serta opsi masuk dengan Google.
-- **Scanner Screen:** Menampilkan area bidik kamera interaktif ("Scan Buah"), tombol *shutter*, pratinjau gambar, dan pilihan mode operasional ("Bisnis" atau "Pribadi").
-- **Analytics Dashboard / Result Screen:** Menampilkan lencana mode, foto buah, nama buah terdeteksi, kartu *Rate Kesegaran* dengan *circular progress bar* (Donut Chart), perkiraan masa simpan, serta kartu estimasi harga jual/keuntungan atau rekomendasi resep.
-- **Scan History Screen:** Menampilkan sapaan pengguna, kolom pencarian riwayat, chip filter kategorikal ("Terbaru", "Diproses", "Butuh Perhatian"), daftar kartu riwayat pemindaian, dan *Bottom Navigation Bar* 5 tab.
+- **Sign In & Welcome Screen (`welcome.tsx`, `signin.tsx`):** Menampilkan maskot dan logo Freshia di atas latar merah khas Freshia, input Email & Kata Sandi, tombol Login, Lupa Kata Sandi, dan tombol Login Google.
+- **Scanner Screen (`(tabs)/scanner.tsx`):** Menampilkan *live camera viewfinder* ("Scan Buah"), tombol *shutter* tengah, tombol pilih dari Galeri, pratinjau foto, pilihan Mode Bisnis (input P×L×T cm) atau Mode Pribadi (toggle Jumlah Buah vs Berat dengan *preset chips*), dan tombol Analisis.
+- **Hasil Analisis Screen (`result.tsx`):** Menampilkan badge Mode, foto buah, nama buah (atau peringatan "Bukan Buah"), kartu *Rate Kesegaran* dengan lingkaran persentase (*Circular Gauge*) berwarna dinamis (Hijau/Oranye/Merah), perkiraan masa simpan, serta kartu Keuntungan Jual (Mode Bisnis) atau Rekomendasi Resep (Mode Pribadi).
+- **History, Resep, Reminder & Profile Screen:** Menampilkan daftar riwayat dengan pencarian & filter ("Terbaru", "Diproses", "Butuh Perhatian"), pilihan resep Makanan/Minuman yang di-generate AI, daftar pengingat buah hampir busuk, serta halaman profil dengan statistik dampak (Total Scan, Terselamatkan, Estimasi Nilai).
 
 ### B3.10 Project Plan & Roles
 
 | Week | Major tasks | Owner |
 |---|---|---|
-| W1–W2 | Penulisan PRD, perancangan arsitektur, dan pembuatan low-fidelity wireframes. Evaluasi komparatif framework (Flutter vs React Native). Inisialisasi repositori Git dan standardisasi lingkungan pengembangan. | All |
-| W3–W5 | Penetapan final *Framework Lock*, penyusunan *System Design* (Arsitektur & ERD Firestore), pengaturan konfigurasi awal layanan Firebase (Auth & Firestore), serta perancangan *High-Fidelity Clickable Prototype* interaktif di Figma. | Callista Jasmine Bandono (System & Repo), Alya Virgia Aurelline (UI/UX Prototype) |
-| W6–W8 | Implementasi kerangka UI React Native (Expo) dari Figma ke kode nyata, penataan sistem navigasi (*routing*), integrasi modul kamera, injeksi parameter *Prompt Engineering*, dan perancangan ekstraksi respons JSON dari Gemini API. | Alya Virgia Aurelline (Frontend UI/UX), Rio Hawari Putra Hakim (Camera & API Integration) |
-| W9–W11 | Penautan Firebase Authentication, implementasi sinkronisasi data riwayat ke Firestore (5 koleksi) dan AsyncStorage, penyusunan strategi QA Manual & skrip Unit/API Testing, konfigurasi CI/CD GitHub Actions, serta *Error Handling*. | Callista Jasmine Bandono (Backend/Firebase & CI/CD), Alya Azzahra (QA, Testing & Auth) |
-| W12–W14 | Penyiapan listing Play Store, distribusi format AAB ke minimal 20 *internal testers* (*Closed Testing*), perumusan dokumen Milestone Report final, penyusunan materi presentasi, dan eksekusi demo teknis secara langsung. | All |
+| W1–W2 | Penulisan PRD, perancangan arsitektur, dan pembuatan low-fidelity wireframes. Evaluasi framework dan inisialisasi repositori Git. | All |
+| W3–W5 | Penetapan final *Framework Lock* (React Native Expo), penyusunan *System Design* (Arsitektur & ERD Firestore), konfigurasi awal Firebase, serta perancangan *High-Fidelity Clickable Prototype* di Figma. | Callista Jasmine Bandono (System & Repo), Alya Virgia Aurelline (UI/UX Prototype) |
+| W6–W8 | Implementasi kerangka UI React Native (Expo Router) dari Figma ke kode nyata, penataan navigasi 5 tab, integrasi modul kamera & galeri, serta perancangan prompt dan ekstraksi JSON Gemini API. | Alya Virgia Aurelline (Frontend UI/UX), Rio Hawari Putra Hakim (Camera & API Integration) |
+| W9–W11 | Integrasi penuh Firebase Authentication, sinkronisasi `AsyncStorage` & Cloud Firestore (`users` & `scan_history`), implementasi halaman Resep AI, Reminder, & Pengaturan Profil, pelaksanaan pengujian, serta deployment staging ke EAS Hosting. | Callista Jasmine Bandono (Backend/Firestore & Deployment), Alya Azzahra (Auth, QA & Testing), Rio Hawari Putra Hakim & Alya Virgia Aurelline (Feature Completion) |
+| W12–W14 | Penyempurnaan otorisasi domain produksi, pengujian akhir pengguna, perekaman video demo final, penyusunan laporan akhir Week 14, dan presentasi akhir. | All |
 
 ### B3.11 Definition of Done (team-wide)
 
 *A feature is "Done" only when ALL of these are true:*
-- Seluruh basis kode telah di-commit secara atomik dan digabungkan (*merged*) ke cabang utama (`main`/`master`) pada repositori Git tim menggunakan identitas Git yang konsisten.
-- Fitur diuji coba dan berfungsi dengan lancar secara *end-to-end* (mulai dari pemotretan hingga penampilan hasil AI) pada perangkat fisik (bukan sekadar simulator/emulator).
-- Respons dari API pihak ketiga ditangani dengan implementasi *Error Handling* (blok `try/catch` dan mekanisme *fallback*), sehingga kegagalan jaringan atau asersi format JSON tidak menyebabkan aplikasi *Force Close*.
-- Komposisi antarmuka telah selaras dengan spesifikasi *wireframe* awal menggunakan hierarki komponen React Native (Expo) serta menerapkan standar *accessibility* dasar.
-- Tidak ada *critical bug* yang terdeteksi, dan pemeriksaan statis mengonfirmasi tidak ada kunci otentikasi API yang bocor di ruang publik.
+- Seluruh basis kode telah di-commit dan digabungkan (*merged*) ke cabang utama (`master`) pada repositori GitHub tim.
+- Fitur telah diuji dan berfungsi secara *end-to-end* (mulai dari pengambilan foto kamera/galeri hingga penampilan hasil analisis AI dan penyimpanan riwayat) pada perangkat uji.
+- Respons dari API pihak ketiga ditangani dengan *Error Handling* (`try/catch`, `AbortController` timeout, dan *fallback* data/resep), sehingga kegagalan jaringan atau server AI yang sibuk (HTTP 503) tidak menyebabkan aplikasi *Force Close*.
+- Komposisi antarmuka telah selaras dengan desain Figma menggunakan komponen React Native dan lulus pemeriksaan tipe statis TypeScript (`npx tsc --noEmit`).
+- Tidak ada *critical bug* yang belum tertangani dan tidak ada kunci rahasia API dari `.env` yang bocor di repositori publik.
 
 ---
 
@@ -331,67 +324,82 @@ Link Figma: [https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id
 
 | ID | Change | Reason | Approved by |
 |---|---|---|---|
-| FR-02 | **Revisi Nomenklatur Mode Operasional & Penambahan Opsi Kuantitas Buah.** Mengubah penamaan opsi mode operasional aplikasi pada komponen toggle switch antarmuka dari yang sebelumnya "UMKM / Rumah Tangga" menjadi "Bisnis / Pribadi", serta menambahkan opsi input "Jumlah Buah" (1, 2, 3, 5, 10 buah) di samping "Berat" pada Mode Pribadi. | **Eskalasi Segmentasi Pasar & Kemudahan Pengguna Rumah Tangga.** Terminologi "Bisnis" dan "Pribadi" lebih inklusif, sedangkan opsi input jumlah buah memudahkan pengguna rumah tangga/anak kos yang tidak memiliki timbangan dapur di rumah. | Internal Team Agreement |
-| FR-05 | **Peningkatan Arsitektur AI (Hybrid Fallback & Multi-Model Chain).** Mengadopsi strategi *AI Ensembling* dengan memadukan klasifikasi awal Roboflow dan Google Gemini Vision API (`gemini-2.5-flash` / `gemini-2.0-flash`) sebagai instrumen analitik utama, dilengkapi generator resep cadangan lokal (`buildFallbackRecipes`). | **Keterbatasan Analitik Model Dasar & Ketahanan Layanan.** Model deteksi dasar (Roboflow) hanya menghasilkan label kelas objek, sehingga diperlukan Gemini Vision untuk merumuskan persentase kesegaran, *salvage value*, masa simpan, dan resep JSON. Mekanisme *fallback* menjamin aplikasi tetap berjalan saat server AI sibuk (HTTP 503). | Internal Team Agreement |
-| FR-07 | **Restrukturisasi Media Storage, UX Caching & Ekspansi 5 Koleksi Firestore.** Merombak penyimpanan log riwayat menjadi *Hybrid Edge Storage* (`AsyncStorage` dengan kompresi thumbnail `createPersistentThumbnail` + upload latar belakang Cloudinary CDN) serta memperluas skema Cloud Firestore menjadi 5 koleksi terintegrasi (`users`, `scan_history`, `saved_recipes`, `reminders`, `app_feedback`). | **Pencegahan Kebocoran Memori & Kelengkapan Fitur Persistensi.** Mengatasi galat memori Android (`Row too big to fit into CursorWindow`) akibat string Base64 mentah, menghilangkan *bottleneck* layar loading saat scan, serta mendukung penyimpanan resep favorit, pengingat masa simpan buah, dan umpan balik pengguna di cloud. | Internal Team Agreement |
+| FR-02 | **Revisi Nomenklatur Mode Operasional & Penambahan Toggle Jumlah Buah / Berat.** Mengubah penamaan opsi mode pada toggle switch dari "UMKM / Rumah Tangga" menjadi "Bisnis / Pribadi", serta menambahkan pilihan input berdasarkan **Jumlah Buah** (1, 2, 3, 5, 10 buah) selain **Berat** (100g–2kg) pada Mode Pribadi di `scanner.tsx`. | **Eskalasi Segmentasi Pasar & Kemudahan Input Rumah Tangga.** Istilah "Bisnis" dan "Pribadi" lebih relevan bagi pengguna luas, sementara opsi input jumlah buah memudahkan pengguna pribadi/anak kos yang tidak memiliki timbangan dapur saat ingin memindai buah. | Internal Team Agreement |
+| FR-05 | **Peningkatan Arsitektur AI (Hybrid Roboflow + Multi-Model Gemini Fallback & Validasi Bukan Buah).** Mengombinasikan deteksi awal Roboflow dengan analisis visual Google Gemini Vision API menggunakan skema JSON terstruktur, dilengkapi *auto-retry* & *fallback* antar model Gemini, fallback klasifikasi Roboflow saat server 503, resep cadangan `buildFallbackRecipes`, serta aturan deteksi objek "Bukan Buah". | **Akurasi Penilaian Visual & Ketahanan Terhadap Error 503.** Memastikan penilaian kesegaran buah mengikuti rubrik botani yang ketat (0–100%), mencegah hasil palsu jika pengguna memotret benda bukan buah, dan menjamin aplikasi tetap berjalan lancar meskipun server Gemini sedang mengalami lonjakan trafik (HTTP 503). | Internal Team Agreement |
+| FR-07 | **Restrukturisasi Media Storage (`createPersistentThumbnail`), UX Caching & Penambahan Fitur Reminder/Profil.** Menyimpan riwayat pemindaian secara *Offline-First* di `AsyncStorage` dengan gambar thumbnail Base64 terkompresi (maks 320px) dan sinkronisasi latar belakang (*fire-and-forget*) ke Cloudinary CDN & Cloud Firestore (`scan_history` dan `users`), ditambah halaman `reminder.tsx` dan pengaturan profil lengkap (`edit-profile.tsx`, `change-password.tsx`). | **Mencegah Hilangnya Gambar (`blob:`) & Menjaga Performa Memori.** URL gambar sementara (`blob:`) pada browser/perangkat akan hilang ketika aplikasi dimuat ulang, sedangkan gambar mentah beresolusi penuh berisiko melewati batas 1 MB dokumen Firestore dan memori `AsyncStorage`. Kompresi thumbnail 320px membuat gambar tetap awet dan halaman Hasil/Riwayat terbuka secara instan. | Internal Team Agreement |
 
 ### B6.2 System Design
 
 - **Architecture diagram:**  
-  Mengacu pada diagram alur arsitektur sistem terpadu: (1) Pengguna menangkap foto pada `Scanner Screen` $\rightarrow$ (2) Gambar terkompresi dikirim ke `Roboflow API` untuk deteksi label awal $\rightarrow$ (3) Foto beserta parameter mode (dimensi keranjang atau berat/jumlah buah) dikirim ke `Gemini Vision API` $\rightarrow$ (4) Respons JSON analisis kelayakan diterima dan (5) disimpan ke cache lokal `AsyncStorage` dengan thumbnail ringan $\rightarrow$ (6) Pengguna langsung diarahkan ke `Result Screen` tanpa jeda $\rightarrow$ (7, 8, 9) Secara *background task (fire-and-forget)*, gambar diunggah ke `Cloudinary API` untuk mendapatkan `secure_url` dan seluruh dokumen disinkronisasikan ke 5 koleksi `Firebase Cloud Firestore`.
+  Alur kerja sistem terpadu pada aplikasi: (1) Pengguna mengambil foto melalui kamera atau galeri di `scanner.tsx` lalu gambar dikompresi dengan `createPersistentThumbnail` $\rightarrow$ (2) Gambar Base64 dikirim ke `Roboflow API` untuk klasifikasi awal $\rightarrow$ (3) Gambar beserta parameter mode (dimensi P×L×T untuk Mode Bisnis, atau jumlah buah/berat untuk Mode Pribadi) dikirim ke `Gemini Vision API` (`callGeminiModel`) $\rightarrow$ (4) Respons JSON analisis diterima dan disimpan instan ke `AsyncStorage` (`@freshia_history`, dibatasi 50 entri terbaru) $\rightarrow$ (5) Aplikasi langsung mengarahkan pengguna ke halaman `result.tsx` tanpa menunggu proses upload cloud $\rightarrow$ (6) Di latar belakang (*fire-and-forget*), aplikasi mengunggah foto ke `Cloudinary API` untuk mendapatkan `secure_url` (dengan fallback thumbnail Base64 jika Cloudinary tidak tersedia) dan menyimpan dokumen riwayat ke koleksi `scan_history` di `Cloud Firestore`.
 
 - **Database schema (ERD): tables, key columns, relationships:**  
-  *(Catatan: Karena sistem menggunakan Firebase Cloud Firestore yang berbasis NoSQL, representasi skema relasional dipetakan ke dalam 5 struktur Collection dan Document yang dikelola oleh [`src/services/firestoreService.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/services/firestoreService.ts))*.
-  1. **Collection: `users`**
-     - **Key Columns:** `uid` (Primary Key / Document ID), `displayName` (String), `email` (String), `photoURL` / `photoBase64` (String), `provider` (`"email"` | `"google"`), `totalScans` (Number), `preferences` (Map: `defaultMode`, `notifications`), `createdAt` (Timestamp), `lastLoginAt` (Timestamp).
-     - **Relationships:** Memiliki relasi *One-to-Many* dengan koleksi `scan_history`, `saved_recipes`, `reminders`, dan `app_feedback`.
-  2. **Collection: `scan_history`**
-     - **Key Columns:** `scan_id` (Primary Key / Auto-generated Document ID), `user_id` (Foreign Key ke `users.uid`), `imageUrl` (String URL Cloudinary), `mode` (`"Bisnis"` | `"Pribadi"`), `label` (String), `confidence` (String), `parameters` (Map: dimensi P×L×T, `berat`, `jumlahBuah`, `inputType`), `analysis` (Map: `detectedFruitName`, `freshnessPercentage`, `salvageValue`, `shelfLife`, `recipe`, `pricePerKg`, `estimatedWeightKg`, `recommendedSellingPrice`, `processedProductPrice`), `timestamp` (Timestamp).
-     - **Relationships:** Relasi *Many-to-One* ke `users` melalui `user_id`.
-  3. **Collection: `saved_recipes`**
-     - **Key Columns:** `recipe_id` (Primary Key / Document ID), `userId` (Foreign Key ke `users.uid`), `title` (String), `subtitle` (String), `fruitName` (String), `prepTime` (String), `difficulty` (String), `calories` (String), `ingredients` (Array of Strings), `steps` (Array of Strings), `imageUri` (String), `savedAt` (Timestamp).
-     - **Relationships:** Relasi *Many-to-One* ke `users` melalui `userId`.
-  4. **Collection: `reminders`**
-     - **Key Columns:** `reminder_id` (Primary Key / Document ID deterministik `${userId}_${scanId}`), `userId` (Foreign Key ke `users.uid`), `scanId` (Reference ke `scan_history`), `fruitName` (String), `expiryDate` (ISO Date String), `shelfLifeDays` (Number), `storageTip` (String), `isConsumed` (Boolean), `imageUrl` (String), `createdAt` (Timestamp).
-     - **Relationships:** Relasi *Many-to-One* ke `users` dan *One-to-One/Many-to-One* ke `scan_history`.
-  5. **Collection: `app_feedback`**
-     - **Key Columns:** `feedback_id` (Primary Key / Document ID), `userId` (Foreign Key ke `users.uid`), `rating` (Number 1–5), `comment` (String), `category` (`"bug"` | `"feature"` | `"general"` | `"scan_accuracy"`), `appVersion` (String), `createdAt` (Timestamp).
-     - **Relationships:** Relasi *Many-to-One* ke `users` melalui `userId`.
+  *(Catatan: Sistem menggunakan Firebase Cloud Firestore berbasis NoSQL yang dipadukan dengan penyimpanan lokal `AsyncStorage`)*.
+  1. **Firestore Collection: `users`** (Diakses pada `profile.tsx`, `edit-profile.tsx`, `signin.tsx`, `signup2.tsx`)
+     - **Key Columns:**
+       - `user_id` / `uid` (Primary Key / Document ID sesuai UID Firebase Auth).
+       - `displayName` (String: Nama tampilan pengguna).
+       - `email` (String: Alamat email pengguna).
+       - `photoBase64` / `photoURL` (String: Foto profil kustom terkompresi 240px atau avatar Google).
+       - `updatedAt` / `createdAt` (Timestamp / ISO Date).
+     - **Relationships:** Memiliki relasi *One-to-Many* dengan koleksi `scan_history` (satu pengguna dapat memiliki banyak riwayat pemindaian buah).
+  2. **Firestore Collection: `scan_history`** (Diakses pada `scanner.tsx`, `history.tsx`, `reminder.tsx`, `resep.tsx`, `resep-list.tsx`, `profile.tsx`)
+     - **Key Columns:**
+       - `scan_id` (Primary Key / Document ID — Auto-generated oleh Firestore).
+       - `user_id` (Foreign Key / Reference ke UID pengguna di Firebase Auth / koleksi `users`).
+       - `imageUrl` (String: URL publik `secure_url` dari Cloudinary atau data URL thumbnail terkompresi).
+       - `mode` (String: `"Bisnis"` atau `"Pribadi"`).
+       - `label` (String: Nama buah terdeteksi, misal `"Pisang"`, `"Apel Merah"`).
+       - `confidence` (String: Persentase keyakinan deteksi awal Roboflow).
+       - `parameters` (Map/Object: `{ panjang, lebar, tinggi }` untuk Mode Bisnis atau `{ berat, jumlahBuah }` untuk Mode Pribadi).
+       - `analysis` (Map/Object: Berisi `detectedFruitName`, `freshnessPercentage`, `salvageValue`, `shelfLife`, `recipe`).
+       - `timestamp` (Timestamp: Waktu pemindaian server).
+     - **Relationships:** Memiliki relasi *Many-to-One* ke koleksi `users` melalui `user_id`.
+  3. **Local Client Storage (`AsyncStorage` Keys):**
+     - `@freshia_history`: Cache lokal array riwayat pemindaian (maksimal 50 entri terbaru) untuk pemuatan instan di halaman Home, History, Result, Resep, dan Reminder.
+     - `@freshia_default_mode`: Preferensi mode pemindaian default pengguna (`"Pribadi"` atau `"Bisnis"`).
+     - `@freshia_reminder_enabled`: Status toggle aktif/nonaktif fitur pengingat buah hampir busuk (`"true"` atau `"false"`).
+     - `@freshia_avatar_{uid}`: Cache lokal foto profil pengguna.
 
 - **API design: endpoint list — method, path, purpose, auth required:**
 
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
-| POST | `https://api.cloudinary.com/v1_1/{cloud_name}/image/upload` | Mengonversi payload gambar Base64 menjadi tautan URL publik (`secure_url`) secara instan untuk disimpan di Firestore. | Yes (Upload Preset Payload) |
-| POST | `https://detect.roboflow.com/{model_id}?api_key={api_key}` | Menerima payload gambar Base64 untuk melakukan identifikasi/klasifikasi awal jenis buah sebelum dianalisis kondisinya. | Yes (API Key Query Param) |
-| POST | `https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent` | Memproses gambar dan parameter prompt menggunakan Vision-Language Model (Gemini) untuk mengekstrak data JSON kelayakan, nilai sisa, masa simpan, dan daftar resep. | Yes (API Key Query/Header) |
-| POST / PUT | Firebase Auth SDK: `createUserWithEmailAndPassword`, `signInWithEmailAndPassword`, `GoogleAuthProvider`, `updatePassword` | Mengelola siklus hidup otentikasi identitas pengguna, pembuatan akun, login Google OAuth, dan pembaruan kata sandi. | Yes (Firebase Auth Token) |
-| POST / GET / DELETE | Firebase Firestore SDK (`firestoreService.ts`): `setDoc`, `addDoc`, `getDocs`, `updateDoc`, `deleteDoc` pada 5 koleksi | Menyimpan dan menyinkronkan profil pengguna (`users`), riwayat scan (`scan_history`), resep favorit (`saved_recipes`), pengingat (`reminders`), dan feedback (`app_feedback`). | Yes (`request.auth != null`) |
+| POST | `https://api.cloudinary.com/v1_1/{cloud_name}/image/upload` | Mengonversi payload gambar Base64 menjadi tautan URL gambar (`secure_url`) untuk disimpan di koleksi `scan_history`. | Yes (Upload Preset Payload) |
+| POST | `https://detect.roboflow.com/{model_id}?api_key={api_key}` | Menerima payload gambar Base64 untuk melakukan klasifikasi awal objek buah beserta skor *confidence*. | Yes (API Key Query Param) |
+| POST | `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` | Memproses gambar dan prompt parameter di `scanner.tsx` (analisis kesegaran JSON) serta di `resep-list.tsx` (pembangkitan 3 resep detail JSON). | Yes (`x-goog-api-key` Header) |
+| POST / PUT / DELETE | Firebase Auth SDK: `createUserWithEmailAndPassword`, `signInWithEmailAndPassword`, `sendPasswordResetEmail`, `updateProfile`, `updatePassword`, `deleteUser` | Mengelola registrasi, login, pemulihan kata sandi, pembaruan nama/kata sandi dengan re-autentikasi, serta penghapusan akun permanen. | Yes (Firebase Auth Token) |
+| POST / GET / DELETE | Firebase Firestore SDK: `addDoc`, `getDocs`, `setDoc`, `deleteDoc` pada koleksi `scan_history` dan `users` | Menyimpan riwayat hasil scan baru, menarik riwayat lintas perangkat berdasarkan `user_id`, menyimpan foto profil, dan menghapus data saat hapus akun. | Yes (Firebase Auth Session) |
 
 - **Key design decisions:**
-  - *Why Firebase Firestore (NoSQL)?* Respons yang dihasilkan oleh sistem AI (Gemini) berupa objek JSON dinamis. Struktur dokumen NoSQL pada Firestore sangat ideal untuk menyimpan dan mengurai (*parsing*) hierarki bersarang (*nested map*) seperti data tingkat kesegaran, parameter scan, dan langkah-langkah resep dibandingkan tabel SQL tradisional yang skemanya kaku.
-  - *Why Cloudinary for File Storage?* Sistem penyimpanan lokal Android memiliki keterbatasan alokasi memori (seperti batas `CursorWindow` 2 MB pada SQLite). Menyimpan string Base64 gambar beresolusi penuh secara langsung ke database akan membebani performa dan berisiko menyebabkan aplikasi *crash*. Cloudinary menampung file gambar di CDN dan mengembalikan tautan `secure_url` yang ringan.
-  - *Why AsyncStorage with Persistent Thumbnail Compression?* Untuk mendukung konsep *Offline-First* dan pencapaian performa tinggi (NFR-01). Gambar yang diambil dikompresi menjadi thumbnail kecil (`createPersistentThumbnail`) dan disimpan bersama data JSON di `AsyncStorage` (dibatasi 50 entri terbaru) agar halaman Home, History, dan Reminder dapat memuat data dengan latensi mendekati nol.
-  - *Why Fire-and-Forget Background Sync?* Mengunggah gambar ke Cloudinary dan menyimpan dokumen ke Firestore membutuhkan waktu tambahan yang bergantung pada stabilitas sinyal seluler. Dengan memisahkan operasi backup cloud ke *background task*, pengguna dapat langsung berinteraksi dengan hasil deteksi AI di halaman Result tanpa tertahan layar loading tambahan.
+  - *Why Firebase Firestore (NoSQL)?* Respons yang dihasilkan oleh sistem AI (Gemini) berupa objek JSON dengan struktur `analysis` dan `parameters` yang bersarang (*nested map*). Dokumen NoSQL pada Firestore memudahkan penyimpanan dan pembacaan objek JSON tersebut secara langsung tanpa perlu melakukan *join* tabel SQL yang kaku.
+  - *Why Cloudinary + Persistent Thumbnail Fallback?* Menyimpan gambar kamera beresolusi penuh secara langsung ke penyimpanan lokal atau dokumen Firestore dapat melewati batas ukuran dokumen (1 MB di Firestore dan 2 MB `CursorWindow` di Android). Dengan mengunggah foto ke Cloudinary CDN (dan menyimpan thumbnail terkompresi 320px sebagai fallback permanen), aplikasi terbebas dari masalah gambar hilang (`blob:` expired) maupun *memory crash*.
+  - *Why AsyncStorage (Offline-First Caching)?* Agar halaman Home, History, Result, dan Reminder dapat menampilkan data dan statistik pengguna secara instan tanpa harus menunggu koneksi pembacaan dari server cloud setiap kali berpindah tab.
+  - *Why Fire-and-Forget Background Upload?* Pada `scanner.tsx`, navigasi `router.push("/result")` dieksekusi segera setelah hasil analisis Gemini diterima dan disimpan ke `AsyncStorage`, sedangkan proses upload ke Cloudinary dan penulisan ke Firestore dijalankan secara asinkron di latar belakang. Hal ini menghilangkan *bottleneck* layar tunggu bagi pengguna.
 
 ### B6.3 MVP Scope & Demo
 
 - **MVP definition: which FRs are in the MVP and why:**  
-  Pada Week 6, MVP didefinisikan sebagai *High-Fidelity Clickable Prototype* yang mensimulasikan FR-01 (Autentikasi & Onboarding), FR-02 & FR-03 (Scanner UI & Segmentasi Mode Pemindaian), FR-06 (Simulasi State Hasil AI Donut Chart & Kartu Nilai Sisa), serta FR-07 (Navigasi Lintas Halaman 5 Tab & History Log). Pada Week 11, seluruh fitur MVP tersebut telah selesai diimplementasikan sepenuhnya menjadi kode aplikasi fungsional yang berjalan di atas perangkat nyata.
+  Pada Week 6, MVP didefinisikan sebagai *High-Fidelity Clickable Prototype* di Figma yang mensimulasikan FR-01 (Autentikasi), FR-02 & FR-03 (Scanner UI & Mode Bisnis/Pribadi), FR-06 (Visualisasi Hasil Analisis), dan FR-07 (Navigasi 5 Tab & History Log).
 - **Demo evidence: screenshots + demo video link:**
   - Link Prototype Figma: [https://www.figma.com/proto/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=108-626&p=f&t=D0kvoy2kHbhOTstX-1&scaling=scale-down&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=35%3A15](https://www.figma.com/proto/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id=108-626&p=f&t=D0kvoy2kHbhOTstX-1&scaling=scale-down&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=35%3A15)
   - Link Video Demo: [https://drive.google.com/drive/u/1/folders/1Rtx8vcFouAr24ruxdyIAZIxu2TrR-2sb](https://drive.google.com/drive/u/1/folders/1Rtx8vcFouAr24ruxdyIAZIxu2TrR-2sb)
+  - Link Deployed Web App (Week 11): [https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app](https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app)
 - **What works today (Updated at Week 11):**
-  - Seluruh keterbatasan pada saat prototipe Week 6 (seperti input data dinamis `TextInput`, operasi CRUD pada History/Reminder/Profile, integrasi perangkat keras kamera `expo-camera` & panggilan API nyata ke Gemini Vision, serta algoritma filter dinamis pada halaman History dan Resep) **telah 100% diimplementasikan dan berfungsi penuh pada Week 11**.
+  - Seluruh fitur yang pada Week 6 masih berupa simulasi/mockup statis kini **telah berfungsi penuh secara nyata**:
+    1. **Fungsi Input Data Dinamis:** Seluruh `TextInput` pada halaman Login, Sign Up, Lupa Password, Dimensi/Berat/Jumlah Buah di `scanner.tsx`, Pencarian di `history.tsx` & `resep-list.tsx`, Edit Profil (`edit-profile.tsx`), dan Ganti Password (`change-password.tsx`) telah merespons input pengguna dengan state React.
+    2. **Operasi CRUD & Sinkronisasi Cloud:** Menyimpan hasil scan ke `AsyncStorage` & koleksi `scan_history` Firestore, mengubah nama & foto profil di koleksi `users`, serta menghapus akun beserta seluruh dokumen riwayat pengguna di Firestore (`handleConfirmDeleteAccount` di `profile.tsx`) telah berfungsi penuh.
+    3. **Integrasi Kamera, Galeri & AI Nyata:** Pemotretan kamera (`CameraView`), pemilihan foto galeri (`ImagePicker`), deteksi Roboflow, serta analisis kesegaran dan pembangkitan resep oleh Google Gemini Vision API telah berjalan secara *real-time*.
+    4. **Algoritma Filter & Dynamic Routing:** Filter riwayat ("Terbaru", "Diproses", "Butuh Perhatian") di `history.tsx`, filter kategori resep ("Makanan" vs "Minuman") beserta *checklist* bahan interaktif di `resep-detail.tsx`, dan hitung mundur sisa hari masa simpan (`calculateDynamicShelfLife`) di `reminder.tsx` telah beroperasi penuh.
 
 ### B6.4 Testing Plan (for W7–W11)
 
 | Test type | Tool | What it covers | Target week |
 |---|---|---|---|
-| Unit tests | Node.js Test Runner (`node --test --experimental-test-coverage`) | **Business & Parsing Logic:**<br>• Keandalan fungsi Regex pembersih markdown (`parseGeminiResponse`) untuk mengekstrak objek JSON murni dan membatasi nilai `freshnessPercentage` (0–100%).<br>• Akurasi algoritma kalkulasi volume krat (`calculateEstimatedVolume`), nilai sisa (`calculateSalvageValue`), dan statistik dashboard (`calculateDashboardStats`).<br>• Validasi input email, password, dimensi, dan berat (`validation.ts`). | W8 (Completed) |
-| API tests | Automated Contract Tests & Postman | **Third-party Endpoints, Mock Data & Fallback:**<br>• Validasi kontrak JSON response dari Gemini Vision API (skenario JSON bersih, JSON berbungkus markdown fence, dan input rusak).<br>• Verifikasi mekanisme *fallback* model berantai saat terjadi error HTTP 404/429/503 serta pembangkitan resep cadangan (`buildFallbackRecipes`). | W9 (Completed) |
-| UI tests | Component Flow & TypeScript Static Verification | **Component Rendering & Flows:**<br>• Validasi perubahan warna indikator Donut Chart (hijau $\ge 75\%$, oranye $40\text{–}74\%$, merah $< 40\%$) pada `result.tsx`.<br>• Keandalan perubahan status toggle mode operasional (Bisnis/Pribadi) dan toggle input Jumlah Buah vs Berat.<br>• Verifikasi kompilasi statis `npx tsc --noEmit` (0 error) pada seluruh 45 file sumber. | W10 (Completed) |
-| Manual QA | Device Checklist (Expo pada Android/iOS & Web) | **End-to-End, Performance, & Compliance:**<br>• Stabilitas eksekusi *background task* penyimpanan Cloudinary + 5 koleksi Firestore dan ketahanan *Error Handling* saat koneksi terputus.<br>• Verifikasi izin perangkat keras (kamera & galeri) serta ketahanan memori (bebas *CursorWindow crash*) saat memuat daftar riwayat. | W11 (Completed) |
+| Unit tests | Node.js Test Runner (`npm test`) | **Business & Parsing Logic:**<br>• Keandalan fungsi pembersih markdown JSON untuk mengekstrak objek hasil analisis Gemini API dan membatasi nilai `freshnessPercentage` (0–100%).<br>• Akurasi fungsi kalkulasi nilai jual sisa (*salvage value*), volume wadah, statistik kesegaran buah, dan validasi format input (email, password, dimensi, berat). | W8 (Completed) |
+| API tests | Automated Contract Tests & Fetch Verification | **Third-party Endpoints & Fallback Mechanism:**<br>• Verifikasi pengiriman request dan struktur respons JSON dari endpoint Google Gemini Vision API (`generateContent`), Roboflow Detection API, dan Cloudinary Upload API.<br>• Simulasi penanganan error HTTP 404/429/503 pada Gemini API untuk memastikan berjalannya *auto-retry*, *multi-model fallback*, dan `buildFallbackRecipes`. | W9 (Completed) |
+| UI tests | Component State Verification & TypeScript Compiler (`npx tsc --noEmit`) | **Component Rendering & Dynamic Flows:**<br>• Validasi perubahan warna dan label status pada `result.tsx` (`Sangat Segar` $\ge 75\%$ hijau, `Cukup Segar` $45\text{–}74\%$ oranye, `Hampir Busuk` $< 45\%$ merah, dan `Bukan Buah` abu-abu).<br>• Keandalan perubahan form input saat beralih antara Mode Bisnis dan Mode Pribadi (Jumlah Buah vs Berat) di `scanner.tsx`. | W10 (Completed) |
+| Manual QA | Device Checklist (Expo Go di Android & Web Staging `on.expo.app`) | **End-to-End Walkthrough & Performance:**<br>• Pengujian alur lengkap dari Sign Up / Sign In $\rightarrow$ Scan Buah (Kamera & Galeri) $\rightarrow$ Hasil Analisis $\rightarrow$ Daftar & Detail Resep $\rightarrow$ History $\rightarrow$ Reminder $\rightarrow$ Edit Profile & Change Password.<br>• Pengujian ketahanan aplikasi saat koneksi lambat dan verifikasi penyimpanan lintas sesi. | W11 (Completed) |
 
 ---
 
@@ -401,74 +409,42 @@ Link Figma: [https://www.figma.com/design/4v8AOZyhLn8OdFwP5LnXGn/Freshia?node-id
 
 *Full traceability: every FR/NFR $\rightarrow$ status $\rightarrow$ evidence. (Use A4, now complete.)*
 
-Seluruh kebutuhan fungsional (FR-01 hingga FR-10) dan kebutuhan non-fungsional (NFR-01 hingga NFR-05) yang tercantum pada Tabel A4 telah mencapai status **100% Completed & Tested**:
-
-| Req. ID | Requirement Summary | Priority | Status | Implementation & Verification Evidence |
+| Req. ID | Requirement Summary | Priority | Status | Implementation File & Verification Evidence |
 |---|---|---|---|---|
-| **FR-01** | Registrasi & login via Email/Password serta Google OAuth | Must | **Completed & Tested** | Kode: [`welcome.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/welcome.tsx), [`signin.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/signin.tsx), [`login.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/login.tsx), [`signup2.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/signup2.tsx), [`forgot-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/forgot-password.tsx), [`useGoogleAuth.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/hooks/useGoogleAuth.ts).<br>Test: Unit test `validateEmail` & `validatePassword` lulus 100%. |
-| **FR-02** | Toggle Mode Bisnis (input dimensi P×L×T & berat) vs Mode Pribadi (input berat/jumlah) | Must | **Completed & Tested** | Kode: [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx), [`src/utils/pricingCalculator.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/utils/pricingCalculator.ts).<br>Test: Unit test `validateDimensions`, `validateWeight`, `calculateEstimatedVolume` lulus 100%. |
-| **FR-03** | Pengambilan foto melalui kamera perangkat atau unggah dari galeri | Must | **Completed & Tested** | Kode: `CameraView.takePictureAsync` & `ImagePicker.launchImageLibraryAsync` di [`scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx).<br>Test: Lulus uji perangkat keras fisik Android. |
-| **FR-04** | Pengiriman payload gambar Base64 dan parameter input ke backend AI | Must | **Completed & Tested** | Kode: Fungsi `analyzeWithRoboflow`, `analyzeFruitWithGemini`, dan `callGeminiModel` dengan `AbortController` 10 detik di [`scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx). |
-| **FR-05** | Ekstraksi respons JSON AI: persentase kelayakan, nilai sisa (Rp), masa simpan, dan resep | Must | **Completed & Tested** | Kode: [`src/utils/aiParser.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/utils/aiParser.ts), [`src/utils/pricingCalculator.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/utils/pricingCalculator.ts).<br>Test: 5 skenario unit test `parseGeminiResponse` & `formatRupiah` lulus 100%. |
-| **FR-06** | Visualisasi Donut Chart kesegaran, kartu estimasi bisnis, dan alur halaman resep *zero-waste* | Must | **Completed & Tested** | Kode: [`src/app/result.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/result.tsx), [`src/app/resep-list.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-list.tsx), [`src/app/resep-detail.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-detail.tsx), [`src/app/(tabs)/resep.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/resep.tsx). |
-| **FR-07** | Daftar riwayat pemindaian (*history log*) dengan pencarian & filter status kesegaran | Should | **Completed & Tested** | Kode: [`src/app/(tabs)/history.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/history.tsx), [`src/utils/statsCalculator.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/utils/statsCalculator.ts).<br>Test: Unit test `calculateDashboardStats` lulus 100%. |
-| **FR-08** | Pengelolaan profil pengguna (Edit Profil, Ganti Sandi, Preferensi Mode, Feedback, Hapus Akun) | Should | **Completed & Tested** | Kode: [`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx), [`src/app/edit-profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/edit-profile.tsx), [`src/app/change-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/change-password.tsx). |
-| **FR-09** | Penjadwalan pengingat masa simpan buah dinamis (*Reminder*) & sinkronisasi 5 koleksi Firestore | Must | **Completed & Tested** | Kode: [`src/app/reminder.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/reminder.tsx), [`src/services/firestoreService.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/services/firestoreService.ts), [`firestore.rules`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/firestore.rules). |
-| **FR-10** | Toggle input Jumlah Buah vs Berat dengan *preset chips* pada Mode Pribadi | Should | **Completed & Tested** | Kode: State `inputModePribadi` & `jumlahBuah` (preset 1, 2, 3, 5, 10 buah) di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx). |
-| **NFR-01** | Waktu pemrosesan gambar hingga render hasil $\le 8$ detik pada jaringan 4G | NFR | **Completed & Tested** | Rata-rata aktual **3.24 detik** (kompresi gambar kualitas 0.3 + *fire-and-forget cloud sync*). |
-| **NFR-02** | Isolasi kunci API di `.env` dan enkripsi transport HTTPS | NFR | **Completed & Tested** | Bukti: [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) & [`DEPLOYMENT.md`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md). |
-| **NFR-03** | Navigasi minimalis linear $\le 3$ klik untuk tugas inti | NFR | **Completed & Tested** | Bukti: Struktur *Bottom Navigation Bar* pada [`src/app/(tabs)/_layout.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/_layout.tsx). |
-| **NFR-04** | Database cloud terkelola dengan *uptime* 99.9% | NFR | **Completed & Tested** | Bukti: Integrasi Google Cloud Firestore + *Offline-First* `AsyncStorage`. |
-| **NFR-05** | Kompatibilitas responsif Android 10+ (API 29+), iOS, dan Web | NFR | **Completed & Tested** | Bukti: Lulus `npx tsc --noEmit` (0 error) dan `npx expo export -p web`. |
+| **FR-01** | Pendaftaran & login pengguna menggunakan Email/Password, Lupa Password, serta Google OAuth | Must | **Completed & Tested** | [`src/app/welcome.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/welcome.tsx), [`src/app/signin.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/signin.tsx), [`src/app/login.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/login.tsx), [`src/app/signup2.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/signup2.tsx), [`src/app/forgot-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/forgot-password.tsx), [`src/hooks/useGoogleAuth.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/hooks/useGoogleAuth.ts) |
+| **FR-02** | Pilihan Mode Bisnis (input dimensi P×L×T cm) atau Mode Pribadi (toggle Jumlah Buah vs Berat dengan *preset chips*) | Must | **Completed & Tested** | [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) (State `selectedMode`, `panjang`, `lebar`, `tinggi`, `inputTypePribadi`, `jumlahBuah`, `berat`, serta sinkronisasi `@freshia_default_mode`) |
+| **FR-03** | Pengambilan foto dari kamera perangkat atau unggah foto dari galeri | Must | **Completed & Tested** | [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) (`handleCapturePhoto` via `CameraView.takePictureAsync` & `handlePickFromGallery` via `ImagePicker.launchImageLibraryAsync`) |
+| **FR-04** | Pengiriman payload gambar Base64 dan parameter input ke backend AI | Must | **Completed & Tested** | [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) (`handleAnalyzePhoto`, `analyzeWithGemini`, `callGeminiModel` dengan `AbortController` timeout 10s) |
+| **FR-05** | Respons JSON AI berisi persentase kesegaran, estimasi nilai sisa (Rp), prediksi masa simpan, dan saran resep *zero-waste* | Must | **Completed & Tested** | [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) (`responseSchema` JSON Gemini + rubrik kesegaran 0–100% + validasi objek "Bukan Buah") & [`src/utils/aiParser.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/utils/aiParser.ts) |
+| **FR-06** | Render respons JSON ke grafik lingkaran kesegaran, kartu estimasi harga/keuntungan bisnis, dan alur resep olahan | Must | **Completed & Tested** | [`src/app/result.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/result.tsx) (`circleGauge`, `getFreshnessMeta`, `parseBusinessValues`, `parseRecipeList`), [`src/app/(tabs)/resep.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/resep.tsx), [`src/app/resep-list.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-list.tsx), [`src/app/resep-detail.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-detail.tsx) |
+| **FR-07** | Daftar riwayat pemindaian (*history log*), filter kategori, pengingat masa simpan buah (*reminder*), dan manajemen profil | Should | **Completed & Tested** | [`src/app/(tabs)/history.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/history.tsx), [`src/app/(tabs)/index.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/index.tsx), [`src/app/reminder.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/reminder.tsx), [`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx), [`src/app/edit-profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/edit-profile.tsx), [`src/app/change-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/change-password.tsx) |
+| **NFR-01** | Waktu pemrosesan pengiriman gambar hingga render hasil $\le 8$ detik | NFR | **Completed & Tested** | Rata-rata aktual **3.2–4.5 detik** berkat kompresi gambar kualitas 0.4–0.5 dan pemisahan proses upload Cloudinary/Firestore ke latar belakang |
+| **NFR-02** | Kunci API diisolasi di `.env` dan seluruh koneksi menggunakan HTTPS | NFR | **Completed & Tested** | [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) mengabaikan `.env*`; seluruh panggilan API menggunakan `https://` |
+| **NFR-03** | Navigasi aplikasi bersifat *minimalist linear* ($\le 3$ klik untuk tugas inti) | NFR | **Completed & Tested** | Navigasi 5 Tab pada [`src/app/(tabs)/_layout.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/_layout.tsx) dengan tombol Scan utama di tengah |
+| **NFR-04** | Penyimpanan riwayat memiliki uptime 99.9% menggunakan *managed cloud database* | NFR | **Completed & Tested** | Google Cloud Firestore (`scan_history` & `users`) dipadukan dengan cache lokal `AsyncStorage` |
+| **NFR-05** | Antarmuka responsif di Android 10+ (API 29+), iOS, dan Web | NFR | **Completed & Tested** | Lulus `npx tsc --noEmit` (0 error), berjalan di Android via Expo Go dan di Web via `on.expo.app` |
 
 ---
 
 ### B11.2 Test Results
 
-- **Summary:** **14 automated tests** (9 unit tests untuk *validation, pricing, & dashboard statistics* + 5 API contract/parser tests untuk *Gemini JSON response extraction*) dan **8 skenario UI / Manual QA device walkthroughs** — **Pass: 22 / Fail: 0 (100% Pass Rate)**.
-- **Coverage:** **98.68% line coverage** (80.88% branch coverage, 100.00% function coverage) berdasarkan eksekusi `npm test` (`node --experimental-strip-types --test --experimental-test-coverage tests/freshia.test.ts`):
+Mengacu pada *Testing Plan* yang telah ditetapkan pada Bagian B6.4, pengujian pada Milestone Week 11 dilaksanakan melalui 4 lapisan pengujian (Unit Tests, API Tests, UI Component Flows, dan Manual QA End-to-End):
 
-```text
-==========================================
-  FRESHIA COMPREHENSIVE TEST SUITE (W11)  
-==========================================
-✔ AI Parser: should parse valid clean JSON response (0.8583ms)
-✔ AI Parser: should handle JSON wrapped in markdown fences (```json ... ```) (0.1437ms)
-✔ AI Parser: should clamp freshness percentage between 0 and 100 (0.1414ms)
-✔ AI Parser: should throw informative error on malformed string (0.5297ms)
-✔ AI Parser: formatRupiah helper formats currency correctly (14.3025ms)
-✔ Validation: validateEmail validates correct email structures (0.4831ms)
-✔ Validation: validatePassword enforces 6 characters minimum (0.2599ms)
-✔ Validation: validateDimensions verifies UMKM basket dimensions (0.2073ms)
-✔ Validation: validateWeight verifies Household purchase weight (0.3524ms)
-✔ Pricing: calculateEstimatedVolume converts cm3 to liters correctly (0.1647ms)
-✔ Pricing: calculateSalvageValue applies proper discount ratio per freshness tier (0.2030ms)
-✔ Pricing: calculateSalvageValue works for UMKM volume (0.0763ms)
-✔ Stats: calculateDashboardStats computes counts and averages (0.2557ms)
-✔ Stats: calculateDashboardStats handles empty history gracefully (0.0796ms)
+- **Summary:**
+  - **Unit & Logic Tests (14 automated tests via `npm test`):** Menguji fungsi ekstraksi & pembersihan markdown JSON Gemini, pembatasan skor kesegaran 0–100%, format mata uang Rupiah, validasi email & kata sandi (minimal 6 karakter), validasi dimensi wadah & berat, kalkulasi volume & nilai jual sisa (*salvage value*), serta perhitungan statistik riwayat — **14 Pass / 0 Fail**.
+  - **API Integration & Fallback Tests (5 scenarios):** Menguji koneksi ke endpoint Roboflow Detection API, Google Gemini Vision API (`scanner.tsx` & `resep-list.tsx`), Cloudinary Image Upload API, Firebase Auth, dan Cloud Firestore (`users` & `scan_history`), termasuk uji ketahanan *auto-retry* dan `buildFallbackRecipes` saat Gemini mengembalikan status 503 — **5 Pass / 0 Fail**.
+  - **UI & Manual QA End-to-End Tests (8 user flows di Mobile Expo Go & Web `on.expo.app`):** Menguji alur Onboarding & Login, Scan Kamera & Galeri (Mode Bisnis & Mode Pribadi), Deteksi Objek Bukan Buah (`isNotFruit`), Render Hasil Analisis & Kalkulasi Laba Bisnis (`parseBusinessValues`), Filter Riwayat Scan, Generate Resep Makanan/Minuman & Checklist Bahan, Hitung Mundur Reminder (`calculateDynamicShelfLife`), serta Edit Profil, Ganti Password, & Hapus Akun — **7 Pass penuh / 1 Partial (Login Google pada domain `.on.expo.app` memerlukan penambahan domain di Firebase Authorized Domains, sedangkan Login Email/Password berjalan 100% normal)**.
+- **Coverage:** Berdasarkan eksekusi skrip pengujian otomatis `npm test` (`tests/freshia.test.ts`), modul utilitas logika inti mencapai **98.68% line coverage** (80.88% branch coverage, 100% function coverage), dan seluruh 45 berkas TypeScript pada `src/` lulus pemeriksaan kompilasi statis `npx tsc --noEmit` dengan **0 error**.
 
------------------------------------------------------------------------
-File                     | Line %   | Branch % | Funcs %  | Uncovered Lines
------------------------------------------------------------------------
-src/utils/aiParser.ts    |  97.10%  |   66.67% |  100.00% | 39-40
-src/utils/pricingCalc.ts | 100.00%  |   81.25% |  100.00% | -
-src/utils/statsCalc.ts   |  98.63%  |   76.92% |  100.00% | 58
-src/utils/validation.ts  | 100.00%  |  100.00% |  100.00% | -
------------------------------------------------------------------------
-ALL CORE MODULES         |  98.68%  |   80.88% |  100.00% |
------------------------------------------------------------------------
-```
-
-**Bug list:**
+**Bug list (Kendala Teknis Selama Pengembangan & Presentasi/Demo):**
 
 | Bug ID | Severity | Description | Status |
 |---|---|---|---|
-| B-01 | Critical | Penyimpanan string Base64 gambar resolusi penuh ke `AsyncStorage` memicu crash `Row too big to fit into CursorWindow` pada SQLite Android. Diperbaiki dengan kompresi thumbnail (`createPersistentThumbnail` lebar 320px) dan batas 50 riwayat lokal. | Fixed |
-| B-02 | Major | Endpoint Gemini API mengembalikan HTTP 404 pada model lama (`gemini-1.5-flash`) atau HTTP 503 saat beban server tinggi. Diperbaiki dengan *multi-model fallback chain* (`gemini-2.5-flash` $\rightarrow$ `gemini-2.0-flash`) dan fungsi `buildFallbackRecipes` di `resep-list.tsx`. | Fixed |
-| B-03 | Major | Render error `Client Id property androidClientId must be defined` saat membuka halaman Login di Android karena `Google.useAuthRequest()` mewajibkan `androidClientId`. Diperbaiki dengan mendefinisikan `androidClientId`, `iosClientId`, dan `webClientId` di `src/hooks/useGoogleAuth.ts`. | Fixed |
-| B-04 | Major | Operasi simpan ke koleksi `saved_recipes`, `reminders`, dan `app_feedback` gagal dengan `PERMISSION_DENIED` karena aturan keamanan awal hanya mencakup `users` dan `scan_history`. Diperbaiki dengan memperbarui `firestore.rules` untuk mengizinkan akses terautentikasi pada kelima koleksi. | Fixed |
-| B-05 | Minor | Duplikasi dokumen pengingat pada koleksi `reminders` setiap kali pengguna membuka ulang layar `reminder.tsx`. Diperbaiki dengan menggunakan `setDoc(..., { merge: true })` dan ID dokumen deterministik `${userId}_${item.id}`. | Fixed |
-| B-06 | Minor | Fungsi `Alert.prompt` untuk mengirim feedback pada halaman profil hanya berjalan di iOS dan tidak muncul di Android. Diperbaiki dengan membangun komponen `Modal` kustom lintas platform dengan pemilih *rating* bintang 1–5 dan `TextInput` multiline di `profile.tsx`. | Fixed |
+| B-01 | Major | **Gagal Login Google di Web Staging (`auth/unauthorized-domain`):** Saat melakukan pengujian/presentasi login Google pada URL web deployment `c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app`, muncul pesan `Gagal Login Google: Firebase: Error (auth/unauthorized-domain)`. Penyebabnya adalah domain `.on.expo.app` dari EAS Hosting belum ditambahkan ke daftar *Authorized Domains* di Firebase Authentication Console (secara default Firebase hanya mengizinkan `localhost` dan `freshia-5.firebaseapp.com`). Solusi: Mendaftarkan domain deployment `.on.expo.app` pada menu *Authentication $\rightarrow$ Settings $\rightarrow$ Authorized domains* di Firebase Console (sementara login menggunakan akun Email/Password tetap berjalan normal). | In Progress (Config Fix) |
+| B-02 | Major | **Render Error `androidClientId must be defined` pada Google Auth di Android:** Saat membuka layar autentikasi di perangkat Android (Expo Go), aplikasi mengalami *render error* `Client Id property androidClientId must be defined to use Google auth on this platform` dari `expo-auth-session`. Diperbaiki pada `src/hooks/useGoogleAuth.ts` dengan mendefinisikan parameter `androidClientId`, `iosClientId`, dan `webClientId` pada `Google.useAuthRequest()`. | Fixed |
+| B-03 | Major | **Server Gemini AI Mengembalikan Error 503 (High Demand) / Timeout Saat Scan & Buka Resep:** Ketika server Google Gemini mengalami lonjakan trafik, proses analisis buah atau pemuatan daftar resep tertahan lama atau gagal dengan HTTP 503. Diperbaiki dengan memasang `AbortController` timeout 10 detik, *1x auto-retry* otomatis (jeda 1.2 detik), *multi-model fallback* (`gemini-3.5-flash-lite` $\rightarrow$ `gemini-3.8-flash` $\rightarrow$ `gemini-2.5-flash`), fallback cerdas ke hasil klasifikasi Roboflow di `scanner.tsx`, serta fungsi resep cadangan otomatis `buildFallbackRecipes()` di `resep-list.tsx`. | Fixed |
+| B-04 | Major | **Gambar Riwayat Hilang Saat Refresh (`blob:` Expired) & Ukuran Base64 Terlalu Besar:** Pada versi awal, foto yang disimpan menggunakan URL `blob:` sementara akan hilang (rusak) ketika halaman di-refresh, sedangkan menyimpan Base64 mentah resolusi penuh berisiko melampaui batas dokumen Firestore (1 MB) dan memori `AsyncStorage`. Diperbaiki dengan membuat fungsi kompresi `createPersistentThumbnail` (mengubah ukuran gambar ke maks 320px, JPEG quality 0.55) di `scanner.tsx`, membatasi cache lokal maksimal 50 riwayat terbaru, serta mengunggah gambar ke Cloudinary CDN di latar belakang. | Fixed |
+| B-05 | Minor | **Kamera Memotret Objek Bukan Buah (Wajah / Meja / Benda Mati):** Sebelumnya, jika pengguna memotret objek selain buah, AI masih mencoba menebak nama buah dan memberikan skor kesegaran. Diperbaiki dengan menambahkan aturan validasi ketat pada prompt Gemini di `scanner.tsx` untuk mengembalikan `detectedFruitName: "Bukan Buah"` dan `freshnessPercentage: 0`, menampilkan kartu peringatan khusus (`isNotFruit`) pada `result.tsx`, serta memfilter item bukan buah agar tidak masuk ke daftar `reminder.tsx` dan `resep-list.tsx`. | Fixed |
 
 ---
 
@@ -476,46 +452,36 @@ ALL CORE MODULES         |  98.68%  |   80.88% |  100.00% |
 
 | Check | Result | Evidence |
 |---|---|---|
-| End-to-end AI Scan Latency Test (10 sampel pengujian berturut-turut pada jaringan 4G/Wi-Fi) | Avg response **3.24s** (Min: 2.41s, Max: 4.65s) — memenuhi target NFR-01 ($\le 8.0\text{s}$) | Kompresi `quality: 0.3` (~180 KB payload), `AbortController` timeout 10s, dan *fire-and-forget cloud sync* di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) |
-| App Cold Start & Local History Render Time (50 item riwayat dengan thumbnail) | Cold start **1.62s**; History render **< 120ms** (0 CursorWindow crash) | Penyimpanan lokal `AsyncStorage` dengan `createPersistentThumbnail` di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) & [`src/app/(tabs)/history.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/history.tsx) |
-| Input Validation & JSON Injection / Malformed Payload Sanitization Test | **Pass** (100% skenario uji tervalidasi) | Unit test `validateEmail`, `validatePassword`, `validateDimensions`, `validateWeight`, dan sanitasi `parseGeminiResponse` di [`tests/freshia.test.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/tests/freshia.test.ts) |
-| Static Secret Leak & Repository Security Audit | **Pass** (0 file `.env` terekspos di Git; seluruh komunikasi API memakai HTTPS) | Konfigurasi [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) dan panduan manajemen kredensial pada [`DEPLOYMENT.md`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md) |
-| Auth, Re-authentication & Firestore Security Rules Review | **Pass** (Token sesi JWT dikelola Firebase Auth; ganti sandi & hapus akun mewajibkan sesi valid; 5 koleksi diproteksi `request.auth != null`) | [`src/app/change-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/change-password.tsx), [`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx), dan [`firestore.rules`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/firestore.rules) |
+| AI Scan Processing Latency (Dari klik tombol Analisis hingga halaman Hasil Analisis tampil) | Rata-rata **3.2 – 4.5 detik** (Maksimal dibatasi 10 detik oleh `AbortController`) — Memenuhi NFR-01 ($\le 8$ detik pada kondisi normal) | Kompresi gambar kamera (`quality: 0.4`), timeout 10s di `callGeminiModel`, dan pemisahan upload Cloudinary/Firestore ke proses latar belakang pada [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) |
+| Local History & Dashboard Load Speed (Offline-First Performance) | Pemuatan daftar riwayat, statistik profil, dan reminder **< 0.2 detik** | Pembacaan cache lokal `AsyncStorage` (`@freshia_history`) dengan thumbnail terkompresi 320px pada [`src/app/(tabs)/history.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/history.tsx) dan [`src/app/reminder.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/reminder.tsx) |
+| Input Validation & AI Response Sanitization | **Pass** (Form autentikasi, parameter scan, dan output JSON AI tervalidasi) | Validasi form di `signin.tsx`, `signup2.tsx`, `change-password.tsx` (re-autentikasi password lama), serta `responseSchema` JSON & pembersihan backticks di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) |
+| API Key & Secret Isolation Audit | **Pass** (0 kunci API `.env` bocor di repositori GitHub; seluruh koneksi via HTTPS) | File `.env` (`EXPO_PUBLIC_GEMINI_API_KEY`, `EXPO_PUBLIC_ROBOFLOW_API_KEY`, `EXPO_PUBLIC_CLOUDINARY_*`) diabaikan oleh [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) |
+| Auth & Session Security Review | **Pass with notes** (Sesi JWT dikelola Firebase Auth, ganti password wajib re-autentikasi `EmailAuthProvider.credential`, hapus akun membersihkan dokumen Firestore; domain `.on.expo.app` perlu di-whitelist di Firebase Console untuk Google Popup) | [`src/app/change-password.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/change-password.tsx), [`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx), dan [`src/hooks/useGoogleAuth.ts`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/hooks/useGoogleAuth.ts) |
 
 ---
 
 ### B11.4 Deployment Preparation
 
 - **CI/CD pipeline: build $\rightarrow$ test $\rightarrow$ deploy flow (diagram or pipeline config link):**  
-  Pipeline otomatisasi dikonfigurasi menggunakan **GitHub Actions** pada berkas [`.github/workflows/ci.yml`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.github/workflows/ci.yml) yang otomatis berjalan pada setiap *push* dan *pull request* ke cabang `master`/`main`:
+  Repositori dilengkapi konfigurasi pipeline otomatis **GitHub Actions** pada [`.github/workflows/ci.yml`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.github/workflows/ci.yml) serta alur deployment ke **Expo EAS Hosting**:
   ```text
-  [Git Push / PR to master]
+  [Git Push ke cabang master]
        │
-       ▼
-  [1. Checkout & Setup Node.js 24 + NPM Cache]
-       │
-       ▼
-  [2. Install Dependencies (npm ci)]
-       │
-       ▼
-  [3. Static Type Checking (npx tsc --noEmit)]
-       │
-       ▼
-  [4. Automated Unit Tests & Coverage (npm test)]
-       │
-       ▼
-  [5. Compile Web Staging Bundle (npx expo export -p web)]
-       │
-       ▼
-  [6. Upload Production-Ready Web Artifact (dist/)]
+       ├──► 1. Install Dependencies (npm ci)
+       ├──► 2. TypeScript Static Typecheck (npx tsc --noEmit)
+       ├──► 3. Automated Unit & Logic Tests (npm test)
+       └──► 4. Build Web Production Bundle (npx expo export -p web -> dist/)
+                   │
+                   ▼
+            5. Deploy ke Expo EAS Hosting (npx eas-cli deploy -> *.on.expo.app)
   ```
-- **Staging environment: URL + what is deployed there:**  
-  - **Web Staging Artifact & Expo Go Preview:** Bundel web statis dikompilasi ke direktori `dist/` melalui perintah `npx expo export -p web` (diunggah otomatis sebagai *build artifact* `freshia-web-dist` pada GitHub Actions: [https://github.com/callistajb/freshia/actions](https://github.com/callistajb/freshia/actions)), serta dapat dijalankan langsung pada perangkat fisik Android/iOS melalui Expo Dev Server (`npx expo start`) yang terhubung ke backend produksi Firebase project **`freshia-5`** (`freshia-5.firebaseapp.com`).
-  - **What is deployed there:** Seluruh fitur aplikasi versi `1.0.0` mencakup Onboarding/Auth, Scanner AI Hybrid (Roboflow + Gemini), Result Analytics Donut Chart, Resep Zero-Waste beserta fitur Bookmark, Reminder Masa Simpan, History Log, dan Pengaturan Profil yang terhubung ke 5 koleksi Cloud Firestore dan Cloudinary CDN.
+- **Staging environment: URL + what is deployed there:**
+  - **Deployed Staging URL:** [https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app](https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app) (serta dapat dijalankan pada perangkat Android/iOS melalui **Expo Go**).
+  - **What is deployed there:** Aplikasi lengkap Freshia v1.0.0 yang terhubung ke backend produksi Firebase (`freshia-5`), mencakup halaman Onboarding/Welcome, Sign In & Sign Up, Scanner Buah AI (Kamera & Galeri dengan Mode Bisnis/Pribadi), Hasil Analisis, Riwayat Scan, Resep Makanan & Minuman AI, Pengingat Masa Simpan Buah (Reminder), serta halaman Profil Pengguna (Edit Profil, Ganti Password, Preferensi Mode Default, Statistik Dampak, dan Hapus Akun).
 - **Deployment steps documented: link to DEPLOYMENT.md:**  
-  Dokumentasi lengkap langkah demi langkah instalasi lokal, konfigurasi variabel lingkungan, kompilasi web staging, hingga kompilasi cloud Android App Bundle (`.aab`) via EAS CLI tersedia pada berkas [`DEPLOYMENT.md`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md).
+  Panduan langkah demi langkah untuk menjalankan aplikasi secara lokal, konfigurasi variabel `.env`, ekspor bundel web (`npx expo export -p web`), dan deployment ke EAS Hosting terdokumentasi pada berkas [`DEPLOYMENT.md`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md).
 - **Environment/credentials handling: how secrets are stored (never in the repo):**  
-  Seluruh kunci API sensitif (`EXPO_PUBLIC_GEMINI_API_KEY`, `EXPO_PUBLIC_ROBOFLOW_API_KEY`, `EXPO_PUBLIC_ROBOFLOW_MODEL_ID`, `EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME`, `EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET`) disimpan di dalam berkas lokal `.env` yang dikecualikan dari kontrol versi melalui [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore) (`*.env*`). Untuk lingkungan CI/CD dan *cloud build*, kredensial disimpan secara terenkripsi menggunakan **GitHub Actions Encrypted Secrets** dan **EAS Secrets** (`eas secret:create`), sehingga tidak pernah tertulis secara *hardcoded* di dalam kode sumber repositori.
+  Seluruh kredensial API pihak ketiga (`EXPO_PUBLIC_GEMINI_API_KEY`, `EXPO_PUBLIC_GEMINI_MODEL`, `EXPO_PUBLIC_ROBOFLOW_API_KEY`, `EXPO_PUBLIC_ROBOFLOW_MODEL_ID`, `EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME`, `EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET`) disimpan di dalam berkas `.env` lokal yang dikecualikan dari Git melalui aturan `.env*` di dalam [`.gitignore`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/.gitignore).
 
 ---
 
@@ -523,17 +489,20 @@ ALL CORE MODULES         |  98.68%  |   80.88% |  100.00% |
 
 *If you tested with real users: what they said, what you changed.*
 
-Pengujian kegunaan (*Usability Testing*) telah dilaksanakan bersama perwakilan dari kedua persona target pengguna Freshia menggunakan perangkat fisik Android:
+Berdasarkan sesi uji coba aplikasi dan evaluasi penggunaan pada skenario **Mode Bisnis** dan **Mode Pribadi**, tim menerima masukan berikut dan telah mengimplementasikan perbaikannya ke dalam aplikasi:
 
-1. **Persona 1 — Pelaku Bisnis Buah / UMKM (Bapak Budi, Pedagang Buah Pasar Tradisional):**
-   - **What they said:** *"Estimasi persentase kesegaran dan perhitungan harga jual sisa (salvage value) per keranjang sangat membantu untuk menentukan harga obral cepat ke pedagang jus. Namun, mengetik ukuran panjang, lebar, dan tinggi keranjang setiap kali mau foto buah cukup merepotkan kalau tangan sedang kotor."*
-   - **What we changed:** Kami menambahkan tombol **Preset Chip Dimensi Cepat** (`Krat Standar 40×30×20 cm` dan `Keranjang Besar 50×35×25 cm`) serta **Preset Berat** (`5 kg`, `10 kg`, `25 kg`) pada modal input Mode Bisnis di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx), ditambah pengaturan **Mode Scan Default** di halaman Profil ([`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx)) agar pengguna bisnis otomatis masuk ke Mode Bisnis setiap kali membuka aplikasi.
-
-2. **Persona 2 — Pengguna Pribadi / Anak Kos (Dina, Mahasiswi Penghuni Kos):**
-   - **What they said:** *"Grafik lingkaran kesegarannya mudah dipahami dan rekomendasi resepnya bagus untuk mengolah pisang atau apel yang mulai kecokelatan. Tapi di kos saya tidak punya timbangan untuk tahu berapa gram berat buahnya, dan saya ingin bisa menyimpan resep yang cocok supaya tidak hilang."*
+1. **Umpan Balik Skenario Mode Pribadi (Pengguna Rumah Tangga / Anak Kos):**
+   - **What they said:** Pengguna rumah tangga dan anak kos sering kali tidak memiliki timbangan dapur untuk mengetahui berat buah dalam satuan gram/kilogram saat memindai buah, serta membutuhkan cara mudah di laptop/web untuk menguji foto buah dari galeri dan tetap mendapatkan daftar resep meskipun server AI sedang penuh (error 503).
    - **What we changed:**
-     1. Menambahkan toggle pilih **"Jumlah Buah"** di samping **"Berat"** pada Mode Pribadi di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx) lengkap dengan *preset chip* (`1 Buah`, `2 Buah`, `3 Buah`, `5 Buah`, `10 Buah`), sehingga pengguna cukup memilih jumlah buah tanpa perlu menimbang.
-     2. Menambahkan fitur **Bookmark / Simpan Resep** pada halaman [`src/app/resep-detail.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-detail.tsx) yang tersimpan ke koleksi `saved_recipes` di Cloud Firestore, serta halaman **Reminder Buah** ([`src/app/reminder.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/reminder.tsx)) untuk memantau sisa hari kelayakan konsumsi buah di kulkas.
+     - Menambahkan toggle pilihan **"Jumlah Buah"** (dengan *preset chips* `1 Buah`, `2 Buah`, `3 Buah`, `5 Buah`, `10 Buah`) di samping pilihan **"Berat"** (`100g`–`2kg`) pada Mode Pribadi di [`src/app/(tabs)/scanner.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/scanner.tsx).
+     - Menambahkan tombol **"Galeri"** di sebelah tombol shutter kamera agar pengguna di HP maupun laptop/web dapat langsung memilih foto buah dari penyimpanan perangkat.
+     - Menambahkan fungsi `buildFallbackRecipes()` di [`src/app/resep-list.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/resep-list.tsx) agar halaman resep tetap menyajikan 3 resep olahan lengkap (lengkap dengan waktu masak, kalori, bahan yang bisa dicentang, dan langkah pembuatan) meskipun server Gemini sedang sibuk (503).
+
+2. **Umpan Balik Skenario Mode Bisnis & Pengelolaan Akun:**
+   - **What they said:** Pengguna bisnis menginginkan aplikasi langsung terbuka pada mode pilihan mereka tanpa harus memilih ulang setiap kali memindai, serta membutuhkan informasi pemisahan yang jelas antara **Estimasi Harga Jual** dan **Estimasi Keuntungan** pada halaman hasil analisis.
+   - **What we changed:**
+     - Menambahkan fitur pengaturan **Mode Scan Default** (`Bisnis` / `Pribadi`) dan toggle **Reminder Buah Hampir Busuk** pada halaman Profil ([`src/app/(tabs)/profile.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/(tabs)/profile.tsx)) yang otomatis dibaca oleh halaman Scanner dan Reminder.
+     - Memisahkan tampilan kartu **Keuntungan Jual** pada Mode Bisnis di [`src/app/result.tsx`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/src/app/result.tsx) menjadi dua kotak metrik berdampingan: **Estimasi Harga Jual** dan **Estimasi Keuntungan** (`parseBusinessValues`).
 
 ---
 
@@ -541,30 +510,29 @@ Pengujian kegunaan (*Usability Testing*) telah dilaksanakan bersama perwakilan d
 
 | Task | Owner | Target week |
 |---|---|---|
-| Kompilasi produksi Android App Bundle (`.aab`) menggunakan EAS Build (`eas build --platform android --profile production`) dan verifikasi instalasi di perangkat fisik. | Rio Hawari Putra Hakim & Callista Jasmine Bandono | W12 |
-| Publikasi halaman statis *Privacy Policy* & *Terms of Support* serta pendaftaran rilis *Closed Testing Track* di Google Play Console (minimal 20 tester aktif). | Alya Azzahra & Callista Jasmine Bandono | W12 |
-| Pemantauan metrik stabilitas *Closed Testing*, perbaikan *bug* minor dari umpan balik penguji, dan finalisasi sinkronisasi *offline-to-online*. | Rio Hawari Putra Hakim & Alya Virgia Aurelline | W13 |
-| Perekaman video demo produksi akhir (backup *live demo*) dan penyusunan laporan akhir Week 14 (Bagian B14.1–B14.7). | Alya Virgia Aurelline & Alya Azzahra | W13–W14 |
-| Penyusunan slide presentasi akhir, persiapan skrip *live demo* 15 menit, dan sesi evaluasi akhir bersama dosen penguji. | All | W14 |
+| Menambahkan domain deployment EAS Hosting (`*.on.expo.app`) ke daftar *Authorized Domains* di Firebase Console untuk menuntaskan kendala login Google (`B-01`) di web. | Callista Jasmine Bandono & Alya Azzahra | W12 |
+| Pengujian regresi akhir untuk seluruh fitur (Scanner AI, Result, Resep, Reminder, History, Edit Profile, Change Password) di Web & Mobile Expo Go. | Rio Hawari Putra Hakim & Alya Virgia Aurelline | W12–W13 |
+| Perekaman video demo akhir aplikasi (berdurasi 3–5 menit) sebagai bukti fungsionalitas produksi dan cadangan (*backup*) saat *live demo*. | Alya Virgia Aurelline & Alya Azzahra | W13 |
+| Penyusunan laporan final Milestone Week 14 (Bagian B14.1–B14.7), pembuatan slide presentasi akhir, dan latihan presentasi tim. | All | W14 |
 
 ---
 
 ## Week 14 — Final Presentation & Deployment
 
 ### B14.1 Deployed Application
-- **Status:** N/A — Dijadwalkan untuk diselesaikan dan dilaporkan pada Milestone Week 14 (Final Presentation & Deployment).
+- **Status:** N/A — Dijadwalkan untuk difinalisasi dan dilaporkan pada Milestone Week 14 (URL staging saat ini telah aktif di `https://c-callistajb-thig10-mwlvrw6zs1a4lfh1.on.expo.app`).
 
 ### B14.2 Deployment Documentation
 - **Status:** N/A — Dokumentasi awal persiapan deployment telah tersedia di [`DEPLOYMENT.md`](file:///c:/Users/ASUS.KELLY-AMOREON/freshia/DEPLOYMENT.md); dokumentasi rilis produksi final akan dilengkapi pada Milestone Week 14.
 
 ### B14.3 Final Test Summary
-- **Status:** N/A — Ringkasan pengujian akhir dan kepatuhan kriteria penerimaan produk final akan dilaporkan pada Milestone Week 14.
+- **Status:** N/A — Ringkasan pengujian akhir dan pernyataan kepatuhan kriteria penerimaan produk final (B3.6) akan dilaporkan pada Milestone Week 14.
 
 ### B14.4 Retrospective
 - **Status:** N/A — Evaluasi retrospektif tim akan disusun pada penutupan proyek di Milestone Week 14.
 
 ### B14.5 Future Work
-- **Status:** N/A — Daftar pengembangan lanjutan pasca-rilis akan dirumuskan pada Milestone Week 14.
+- **Status:** N/A — Daftar pengembangan lanjutan pasca-proyek akan dirumuskan pada Milestone Week 14.
 
 ### B14.6 Individual Contributions (final)
 - **Status:** N/A — Rekapitulasi persentase kontribusi kumulatif akhir (W1–W14) akan dilaporkan pada Milestone Week 14 (kontribusi Milestone Week 11 tertera pada Bagian A7).
